@@ -4,7 +4,7 @@ services:
     container_name: slum-warriors
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "3005:3001"
     volumes:
       - slum-warriors-data:/app/data
     environment:
