@@ -14,6 +14,15 @@ services:
       - DISCORD_CLIENT_ID=1477714942647079074
       - DISCORD_CLIENT_SECRET=A-mHq0cHPnOaIIh03GvCi1rebJn3ciu8
       - DISCORD_REDIRECT_URI=https://sw.3r6nuss.de/auth/callback
+    networks:
+      - default
+      - npm_network
 
 volumes:
   slum-warriors-data:
+
+
+networks:
+  npm_network:
+    external: true
+    name: npm_network
