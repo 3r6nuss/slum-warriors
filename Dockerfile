@@ -1,6 +1,9 @@
 # ---- Build Stage ----
 FROM node:22-alpine AS builder
 
+# Build tools for native modules (better-sqlite3)
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
 # Install dependencies
@@ -14,21 +17,20 @@ RUN npm run build
 # ---- Production Stage ----
 FROM node:22-alpine
 
+# Build tools for better-sqlite3 native module
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
 # Install only production dependencies
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && apk del python3 make g++
 
 # Copy backend server
 COPY server/ ./server/
 
 # Copy built frontend from builder
 COPY --from=builder /app/dist ./dist
-
-# Serve static frontend from Express in production
-COPY docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
 
 # Data volume for SQLite database
 VOLUME /app/data
@@ -39,4 +41,4 @@ ENV DB_PATH=/app/data/lagerverwaltung.db
 
 EXPOSE 3001
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["node", "server/index.js"]
