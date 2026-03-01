@@ -13,7 +13,7 @@ services:
       - SESSION_SECRET=HIER_EIN_SICHERES_PASSWORT_EINSETZEN
       - DISCORD_CLIENT_ID=1477714942647079074
       - DISCORD_CLIENT_SECRET=A-mHq0cHPnOaIIh03GvCi1rebJn3ciu8
-      - DISCORD_REDIRECT_URI=https://DEINE-DOMAIN.de/auth/callback
+      - DISCORD_REDIRECT_URI=https://sw.3r6nuss.de/auth/callback
 
 volumes:
   slum-warriors-data:
