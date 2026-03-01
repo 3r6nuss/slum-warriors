@@ -56,7 +56,7 @@ db.exec(`
     discord_id TEXT NOT NULL UNIQUE,
     username TEXT NOT NULL,
     avatar TEXT,
-    role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('admin', 'moderator', 'member', 'viewer')),
+    role TEXT NOT NULL DEFAULT 'member',
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
   );

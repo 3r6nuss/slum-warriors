@@ -8,12 +8,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/lib/auth';
 import {
     ShieldCheck, Users, ScrollText, Crown, Shield, User, Eye,
-    CheckCircle, AlertCircle
+    CheckCircle, AlertCircle, Swords
 } from 'lucide-react';
+
+const HARDCODED_IDS = [
+    '823276402320998450',
+    '809020358941605938',
+    '374934995346653186',
+    '675697089875017773',
+];
 
 const ROLE_CONFIG = {
     admin: { label: 'Admin', icon: Crown, color: 'default', description: 'Voller Zugriff' },
-    moderator: { label: 'Moderator', icon: Shield, color: 'warning', description: 'Erweiterte Rechte' },
+    führung: { label: 'Führung', icon: Swords, color: 'warning', description: 'Führungslager Zugriff' },
+    moderator: { label: 'Moderator', icon: Shield, color: 'secondary', description: 'Erweiterte Rechte' },
     member: { label: 'Mitglied', icon: User, color: 'secondary', description: 'Standard-Zugriff' },
     viewer: { label: 'Zuschauer', icon: Eye, color: 'outline', description: 'Nur lesen' },
 };
@@ -85,7 +93,7 @@ function RoleManagement() {
                             const roleInfo = ROLE_CONFIG[u.role] || ROLE_CONFIG.member;
                             const RoleIcon = roleInfo.icon;
                             const isCurrentUser = u.discord_id === currentUser?.discord_id;
-                            const isHardcodedAdmin = u.discord_id === '823276402320998450';
+                            const isProtected = HARDCODED_IDS.includes(u.discord_id);
 
                             return (
                                 <TableRow key={u.id}>
@@ -120,7 +128,7 @@ function RoleManagement() {
                                         </Badge>
                                     </TableCell>
                                     <TableCell>
-                                        {isHardcodedAdmin ? (
+                                        {isProtected ? (
                                             <span className="text-xs text-muted-foreground">Geschützt</span>
                                         ) : (
                                             <Select
