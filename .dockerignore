@@ -1,0 +1,10 @@
+node_modules
+*.db
+*.db-wal
+*.db-shm
+.git
+.gitignore
+.vscode
+.idea
+*.md
+.env

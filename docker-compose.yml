@@ -1,0 +1,19 @@
+services:
+  slum-warriors:
+    build: .
+    container_name: slum-warriors
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - slum-warriors-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - SESSION_SECRET=HIER_EIN_SICHERES_PASSWORT_EINSETZEN
+      - DISCORD_CLIENT_ID=1477714942647079074
+      - DISCORD_CLIENT_SECRET=A-mHq0cHPnOaIIh03GvCi1rebJn3ciu8
+      - DISCORD_REDIRECT_URI=https://DEINE-DOMAIN.de/auth/callback
+
+volumes:
+  slum-warriors-data:
