@@ -25,4 +25,4 @@ volumes:
 networks:
   npm_network:
     external: true
-    name: npm_network
+    name: nginx-proxy-manager_default
