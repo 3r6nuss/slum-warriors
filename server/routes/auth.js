@@ -100,7 +100,7 @@ router.post('/callback', async (req, res) => {
 
         if (existingUser) {
             db.prepare(
-                'UPDATE users SET username = ?, avatar = ?, updated_at = datetime("now","localtime") WHERE discord_id = ?'
+                `UPDATE users SET username = ?, avatar = ?, updated_at = datetime('now','localtime') WHERE discord_id = ?`
             ).run(userInfo.username, userInfo.avatar, userInfo.id);
         } else {
             db.prepare(
@@ -200,7 +200,7 @@ router.put('/users/:id/role', requireAdmin, (req, res) => {
         return res.status(403).json({ error: 'Führungs-Rolle kann für fest hinterlegte Mitglieder nicht entfernt werden' });
     }
 
-    db.prepare('UPDATE users SET role = ?, updated_at = datetime("now","localtime") WHERE id = ?').run(role, id);
+    db.prepare(`UPDATE users SET role = ?, updated_at = datetime('now','localtime') WHERE id = ?`).run(role, id);
     res.json({ success: true, message: `Rolle auf "${role}" geändert` });
 });
 
