@@ -3,8 +3,6 @@ services:
     build: .
     container_name: slum-warriors
     restart: unless-stopped
-    ports:
-      - "3005:3001"
     volumes:
       - slum-warriors-data:/app/data
     environment:
@@ -15,14 +13,12 @@ services:
       - DISCORD_CLIENT_SECRET=A-mHq0cHPnOaIIh03GvCi1rebJn3ciu8
       - DISCORD_REDIRECT_URI=https://sw.3r6nuss.de/auth/callback
     networks:
-      - default
-      - npm_network
+      - nginx-proxy-manager_default
 
 volumes:
   slum-warriors-data:
 
 
 networks:
-  npm_network:
+  nginx-proxy-manager_default:
     external: true
-    name: nginx-proxy-manager_default
