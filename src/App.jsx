@@ -2,8 +2,8 @@ import { BrowserRouter as Router, Routes, Route, NavLink, useParams, Navigate } 
 import { useState } from 'react';
 import {
   LayoutDashboard, PackagePlus, PackageMinus, Settings,
-  ScrollText, User, Menu, Swords, Shield, Warehouse,
-  ChevronRight, ShieldCheck, LogOut
+  ScrollText, User, Users, Menu, Swords, Shield, Warehouse,
+  ChevronRight, ShieldCheck, LogOut, BookOpen, ClipboardCheck, BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AuthProvider, useAuth } from '@/lib/auth';
@@ -14,18 +14,15 @@ import AdjustStock from '@/pages/AdjustStock';
 import Protocols from '@/pages/Protocols';
 import PersonProtocol from '@/pages/PersonProtocol';
 import AdminArea from '@/pages/AdminArea';
+import StockLevels from '@/pages/StockLevels';
 import { LoginPage, AuthCallback, PendingPage } from '@/pages/Login';
 
 const warehouses = [
-  { id: 1, label: 'Führungslager', icon: Shield, type: 'leadership' },
   { id: 2, label: 'Normales Lager', icon: Warehouse, type: 'normal' },
+  { id: 1, label: 'Führungslager', icon: Shield, type: 'leadership' },
 ];
 
-const bottomNavItems = [
-  { to: '/anpassen', icon: Settings, label: 'Bestand anpassen' },
-  { to: '/protokolle', icon: ScrollText, label: 'Protokolle' },
-  { to: '/person', icon: User, label: 'Personen-Protokoll' },
-];
+
 
 function WarehouseNavItem({ warehouse, onClose }) {
   const [hovered, setHovered] = useState(false);
@@ -54,7 +51,7 @@ function WarehouseNavItem({ warehouse, onClose }) {
       </div>
 
       <div
-        className={`overflow-hidden transition-all duration-250 ease-in-out ${hovered ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'
+        className={`overflow-hidden transition-all duration-250 ease-in-out ${hovered ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
           }`}
       >
         <div className="ml-4 pl-3 border-l border-sidebar-border/50 space-y-0.5 py-1">
@@ -84,12 +81,174 @@ function WarehouseNavItem({ warehouse, onClose }) {
             <PackageMinus className="h-3.5 w-3.5" />
             Auslagern
           </NavLink>
+          <NavLink
+            to={`/anpassen/${warehouse.id}`}
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
+                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
+                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
+              }`
+            }
+          >
+            <Settings className="h-3.5 w-3.5" />
+            Lager anpassen
+          </NavLink>
+          <NavLink
+            to={`/bestaetigen/${warehouse.id}`}
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
+                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
+                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
+              }`
+            }
+          >
+            <ClipboardCheck className="h-3.5 w-3.5" />
+            Lager bestätigen
+          </NavLink>
         </div>
       </div>
     </div>
   );
 }
 
+function AdminNavItem({ onClose }) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div
+        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${hovered
+          ? 'bg-sidebar-accent/50 text-sidebar-foreground'
+          : 'text-sidebar-foreground/70'
+          }`}
+      >
+        <div className="flex items-center gap-3">
+          <ShieldCheck className="h-4 w-4" />
+          <span>Admin</span>
+        </div>
+        <ChevronRight
+          className={`h-3.5 w-3.5 transition-transform duration-200 ${hovered ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
+            }`}
+        />
+      </div>
+
+      <div
+        className={`overflow-hidden transition-all duration-250 ease-in-out ${hovered ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
+          }`}
+      >
+        <div className="ml-4 pl-3 border-l border-sidebar-border/50 space-y-0.5 py-1">
+          <NavLink
+            to="/admin"
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
+                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
+                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
+              }`
+            }
+          >
+            <Users className="h-3.5 w-3.5" />
+            Rollenverwaltung
+          </NavLink>
+          <NavLink
+            to="/admin/logs"
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
+                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
+                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
+              }`
+            }
+          >
+            <ScrollText className="h-3.5 w-3.5" />
+            System-Logs
+          </NavLink>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BuchhaltungNavItem({ onClose }) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div
+        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${hovered
+          ? 'bg-sidebar-accent/50 text-sidebar-foreground'
+          : 'text-sidebar-foreground/70'
+          }`}
+      >
+        <div className="flex items-center gap-3">
+          <BookOpen className="h-4 w-4" />
+          <span>Buchhaltung</span>
+        </div>
+        <ChevronRight
+          className={`h-3.5 w-3.5 transition-transform duration-200 ${hovered ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
+            }`}
+        />
+      </div>
+
+      <div
+        className={`overflow-hidden transition-all duration-250 ease-in-out ${hovered ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
+          }`}
+      >
+        <div className="ml-4 pl-3 border-l border-sidebar-border/50 space-y-0.5 py-1">
+          <NavLink
+            to="/protokolle"
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
+                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
+                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
+              }`
+            }
+          >
+            <ScrollText className="h-3.5 w-3.5" />
+            Protokolle
+          </NavLink>
+          <NavLink
+            to="/person"
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
+                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
+                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
+              }`
+            }
+          >
+            <User className="h-3.5 w-3.5" />
+            Personen-Protokoll
+          </NavLink>
+          <NavLink
+            to="/lagerstaende"
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
+                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
+                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
+              }`
+            }
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Lagerstände
+          </NavLink>
+        </div>
+      </div>
+    </div>
+  );
+}
 function UserProfile() {
   const { user, logout, isAdmin } = useAuth();
   if (!user) return null;
@@ -186,46 +345,17 @@ function Sidebar({ open, onClose }) {
             ))}
           </div>
 
-          {/* Verwaltung section */}
+          {/* Buchhaltung section */}
           <div className="mt-5 mb-2 px-3">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
               Verwaltung
             </p>
           </div>
           <div className="space-y-1">
-            {bottomNavItems.map(({ to, icon: Icon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                onClick={onClose}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
-                    ? 'bg-sidebar-accent text-sidebar-primary shadow-sm'
-                    : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                  }`
-                }
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </NavLink>
-            ))}
+            <BuchhaltungNavItem onClose={onClose} />
 
-            {/* Admin link – only visible for admins */}
-            {isAdmin && (
-              <NavLink
-                to="/admin"
-                onClick={onClose}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
-                    ? 'bg-sidebar-accent text-sidebar-primary shadow-sm'
-                    : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-                  }`
-                }
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Admin
-              </NavLink>
-            )}
+            {/* Admin hover menu – only visible for admins */}
+            {isAdmin && <AdminNavItem onClose={onClose} />}
           </div>
         </nav>
 
@@ -244,6 +374,11 @@ function CheckInWrapper() {
 function CheckOutWrapper() {
   const { warehouseId } = useParams();
   return <CheckOutForm preselectedWarehouse={warehouseId} />;
+}
+
+function AdjustStockWrapper() {
+  const { warehouseId } = useParams();
+  return <AdjustStock preselectedWarehouse={warehouseId} />;
 }
 
 function RequireAuth({ children }) {
@@ -290,10 +425,13 @@ function AppShell() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/einlagern/:warehouseId" element={<CheckInWrapper />} />
             <Route path="/auslagern/:warehouseId" element={<CheckOutWrapper />} />
-            <Route path="/anpassen" element={<AdjustStock />} />
+            <Route path="/anpassen/:warehouseId" element={<AdjustStockWrapper />} />
+            <Route path="/bestaetigen/:warehouseId" element={<AdjustStockWrapper />} />
             <Route path="/protokolle" element={<Protocols />} />
             <Route path="/person" element={<PersonProtocol />} />
+            <Route path="/lagerstaende" element={<StockLevels />} />
             <Route path="/admin" element={<AdminArea />} />
+            <Route path="/admin/logs" element={<AdminArea initialTab="logs" />} />
           </Routes>
         </main>
       </div>

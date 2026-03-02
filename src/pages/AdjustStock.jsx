@@ -10,12 +10,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Settings, CheckCircle, AlertCircle, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 
-export default function AdjustStock() {
+export default function AdjustStock({ preselectedWarehouse }) {
     const [warehouses, setWarehouses] = useState([]);
     const [products, setProducts] = useState([]);
     const [inventory, setInventory] = useState([]);
     const [adjustments, setAdjustments] = useState([]);
-    const [warehouseId, setWarehouseId] = useState('');
+    const [warehouseId, setWarehouseId] = useState(preselectedWarehouse || '');
     const [productId, setProductId] = useState('');
     const [newQuantity, setNewQuantity] = useState('');
     const [personName, setPersonName] = useState('');
@@ -27,10 +27,16 @@ export default function AdjustStock() {
         fetch('/api/inventory/warehouses/list').then(r => r.json()).then(setWarehouses);
         fetch('/api/products').then(r => r.json()).then(setProducts);
         fetch('/api/inventory').then(r => r.json()).then(setInventory);
-        fetch('/api/adjustments').then(r => r.json()).then(setAdjustments);
+        const adjParams = new URLSearchParams();
+        if (preselectedWarehouse) adjParams.set('warehouse', preselectedWarehouse);
+        fetch(`/api/adjustments?${adjParams}`).then(r => r.json()).then(setAdjustments);
     };
 
-    useEffect(loadData, []);
+    useEffect(loadData, [preselectedWarehouse]);
+
+    useEffect(() => {
+        if (preselectedWarehouse) setWarehouseId(preselectedWarehouse);
+    }, [preselectedWarehouse]);
 
     const currentStock = useMemo(() => {
         if (!warehouseId || !productId) return null;
@@ -111,7 +117,7 @@ export default function AdjustStock() {
 
                             <div className="space-y-2">
                                 <Label htmlFor="warehouse">Lager</Label>
-                                <Select id="warehouse" value={warehouseId} onValueChange={setWarehouseId}>
+                                <Select id="warehouse" value={warehouseId} onValueChange={setWarehouseId} disabled={!!preselectedWarehouse}>
                                     <SelectOption value="">Lager auswählen...</SelectOption>
                                     {warehouses.map(w => (
                                         <SelectOption key={w.id} value={String(w.id)}>{w.name}</SelectOption>

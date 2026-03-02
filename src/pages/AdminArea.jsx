@@ -254,9 +254,9 @@ function LogPage() {
     );
 }
 
-export default function AdminArea() {
+export default function AdminArea({ initialTab = 'roles' }) {
     const { isAdmin } = useAuth();
-    const [activeTab, setActiveTab] = useState('roles');
+    const [activeTab, setActiveTab] = useState(initialTab);
 
     if (!isAdmin) {
         return (
