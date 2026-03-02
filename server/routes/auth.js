@@ -9,11 +9,6 @@ const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1477714942647079074'
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'A-mHq0cHPnOaIIh03GvCi1rebJn3ciu8';
 const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || 'http://localhost:5173/auth/callback';
 const ADMIN_DISCORD_ID = '823276402320998450';
-const LEADERSHIP_DISCORD_IDS = [
-    '809020358941605938',
-    '374934995346653186',
-    '675697089875017773',
-];
 
 // Helper: HTTPS request as promise
 function httpsRequest(url, options, postData) {
@@ -91,34 +86,28 @@ router.post('/callback', async (req, res) => {
         // Upsert user in DB
         const existingUser = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(userInfo.id);
         const isAdmin = userInfo.id === ADMIN_DISCORD_ID;
-        const isLeadership = LEADERSHIP_DISCORD_IDS.includes(userInfo.id);
-
-        // Determine default role
-        let defaultRole = 'member';
-        if (isAdmin) defaultRole = 'admin';
-        else if (isLeadership) defaultRole = 'führung';
 
         if (existingUser) {
             db.prepare(
                 `UPDATE users SET username = ?, avatar = ?, updated_at = datetime('now','localtime') WHERE discord_id = ?`
             ).run(userInfo.username, userInfo.avatar, userInfo.id);
         } else {
+            // New user: admin gets auto-approved, everyone else is pending
+            const defaultRole = isAdmin ? 'admin' : 'pending';
+            const defaultApproved = isAdmin ? 1 : 0;
             db.prepare(
-                'INSERT INTO users (discord_id, username, avatar, role) VALUES (?, ?, ?, ?)'
-            ).run(userInfo.id, userInfo.username, userInfo.avatar, defaultRole);
+                'INSERT INTO users (discord_id, username, avatar, role, approved) VALUES (?, ?, ?, ?, ?)'
+            ).run(userInfo.id, userInfo.username, userInfo.avatar, defaultRole, defaultApproved);
         }
 
         // Get the full user record
         const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(userInfo.id);
 
-        // Force roles for hard-coded IDs
+        // Force admin role for hard-coded admin ID
         if (isAdmin && user.role !== 'admin') {
-            db.prepare('UPDATE users SET role = ? WHERE discord_id = ?').run('admin', userInfo.id);
+            db.prepare('UPDATE users SET role = ?, approved = 1 WHERE discord_id = ?').run('admin', userInfo.id);
             user.role = 'admin';
-        }
-        if (isLeadership && user.role === 'member') {
-            db.prepare('UPDATE users SET role = ? WHERE discord_id = ?').run('führung', userInfo.id);
-            user.role = 'führung';
+            user.approved = 1;
         }
 
         // Store user in session
@@ -128,6 +117,7 @@ router.post('/callback', async (req, res) => {
             username: user.username,
             avatar: user.avatar,
             role: user.role,
+            approved: user.approved,
         };
 
         res.json({ user: req.session.user });
@@ -149,6 +139,7 @@ router.get('/me', (req, res) => {
                 username: user.username,
                 avatar: user.avatar,
                 role: user.role,
+                approved: user.approved,
             };
             return res.json({ user: req.session.user });
         }
@@ -183,7 +174,7 @@ router.put('/users/:id/role', requireAdmin, (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
 
-    if (!['admin', 'führung', 'moderator', 'member', 'viewer'].includes(role)) {
+    if (!['admin', 'führung', 'moderator', 'member', 'viewer', 'pending'].includes(role)) {
         return res.status(400).json({ error: 'Ungültige Rolle' });
     }
 
@@ -192,16 +183,32 @@ router.put('/users/:id/role', requireAdmin, (req, res) => {
         return res.status(404).json({ error: 'Benutzer nicht gefunden' });
     }
 
-    // Prevent removing roles from hard-coded users
+    // Prevent removing admin role from hard-coded admin
     if (user.discord_id === ADMIN_DISCORD_ID && role !== 'admin') {
         return res.status(403).json({ error: 'Admin-Rolle kann für den Hauptadmin nicht geändert werden' });
-    }
-    if (LEADERSHIP_DISCORD_IDS.includes(user.discord_id) && role !== 'führung' && role !== 'admin') {
-        return res.status(403).json({ error: 'Führungs-Rolle kann für fest hinterlegte Mitglieder nicht entfernt werden' });
     }
 
     db.prepare(`UPDATE users SET role = ?, updated_at = datetime('now','localtime') WHERE id = ?`).run(role, id);
     res.json({ success: true, message: `Rolle auf "${role}" geändert` });
+});
+
+// PUT /api/auth/users/:id/approve – approve a pending user and assign role (admin only)
+router.put('/users/:id/approve', requireAdmin, (req, res) => {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    const targetRole = role || 'member';
+    if (!['admin', 'führung', 'moderator', 'member', 'viewer'].includes(targetRole)) {
+        return res.status(400).json({ error: 'Ungültige Rolle' });
+    }
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!user) {
+        return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+    }
+
+    db.prepare(`UPDATE users SET role = ?, approved = 1, updated_at = datetime('now','localtime') WHERE id = ?`).run(targetRole, id);
+    res.json({ success: true, message: `Benutzer freigeschaltet mit Rolle "${targetRole}"` });
 });
 
 module.exports = router;

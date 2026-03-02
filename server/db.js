@@ -62,6 +62,14 @@ db.exec(`
   );
 `);
 
+// Migration: Add 'approved' column to users table if missing
+const userColumns = db.prepare("PRAGMA table_info(users)").all();
+if (!userColumns.find(c => c.name === 'approved')) {
+  db.exec(`ALTER TABLE users ADD COLUMN approved INTEGER NOT NULL DEFAULT 0`);
+  // Auto-approve all existing users so they aren't locked out
+  db.exec(`UPDATE users SET approved = 1`);
+}
+
 // Seed warehouses if not exist
 const warehouseCount = db.prepare('SELECT COUNT(*) as count FROM warehouses').get();
 if (warehouseCount.count === 0) {

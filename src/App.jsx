@@ -14,7 +14,7 @@ import AdjustStock from '@/pages/AdjustStock';
 import Protocols from '@/pages/Protocols';
 import PersonProtocol from '@/pages/PersonProtocol';
 import AdminArea from '@/pages/AdminArea';
-import { LoginPage, AuthCallback } from '@/pages/Login';
+import { LoginPage, AuthCallback, PendingPage } from '@/pages/Login';
 
 const warehouses = [
   { id: 1, label: 'Führungslager', icon: Shield, type: 'leadership' },
@@ -39,8 +39,8 @@ function WarehouseNavItem({ warehouse, onClose }) {
     >
       <div
         className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${hovered
-            ? 'bg-sidebar-accent/50 text-sidebar-foreground'
-            : 'text-sidebar-foreground/70'
+          ? 'bg-sidebar-accent/50 text-sidebar-foreground'
+          : 'text-sidebar-foreground/70'
           }`}
       >
         <div className="flex items-center gap-3">
@@ -247,7 +247,7 @@ function CheckOutWrapper() {
 }
 
 function RequireAuth({ children }) {
-  const { isLoggedIn, loading } = useAuth();
+  const { isLoggedIn, loading, isPending } = useAuth();
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -255,7 +255,9 @@ function RequireAuth({ children }) {
       </div>
     );
   }
-  return isLoggedIn ? children : <Navigate to="/login" />;
+  if (!isLoggedIn) return <Navigate to="/login" />;
+  if (isPending) return <PendingPage />;
+  return children;
 }
 
 function AppShell() {

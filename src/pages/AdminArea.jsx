@@ -8,14 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/lib/auth';
 import {
     ShieldCheck, Users, ScrollText, Crown, Shield, User, Eye,
-    CheckCircle, AlertCircle, Swords
+    CheckCircle, AlertCircle, Swords, Clock, UserCheck
 } from 'lucide-react';
 
 const HARDCODED_IDS = [
     '823276402320998450',
-    '809020358941605938',
-    '374934995346653186',
-    '675697089875017773',
 ];
 
 const ROLE_CONFIG = {
@@ -24,6 +21,7 @@ const ROLE_CONFIG = {
     moderator: { label: 'Moderator', icon: Shield, color: 'secondary', description: 'Erweiterte Rechte' },
     member: { label: 'Mitglied', icon: User, color: 'secondary', description: 'Standard-Zugriff' },
     viewer: { label: 'Zuschauer', icon: Eye, color: 'outline', description: 'Nur lesen' },
+    pending: { label: 'Ausstehend', icon: Clock, color: 'destructive', description: 'Wartet auf Freischaltung' },
 };
 
 function RoleManagement() {
@@ -60,6 +58,26 @@ function RoleManagement() {
         }
     };
 
+    const approveUser = async (userId, role = 'member') => {
+        try {
+            const res = await fetch(`/api/auth/users/${userId}/approve`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ role }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setStatus({ type: 'success', message: data.message });
+                loadUsers();
+            } else {
+                setStatus({ type: 'error', message: data.error });
+            }
+        } catch (err) {
+            setStatus({ type: 'error', message: 'Fehler beim Freischalten' });
+        }
+    };
+
     return (
         <Card className="backdrop-blur-sm bg-card/80 border-border/50">
             <CardHeader>
@@ -85,6 +103,7 @@ function RoleManagement() {
                             <TableHead>Discord ID</TableHead>
                             <TableHead>Aktuelle Rolle</TableHead>
                             <TableHead>Rolle ändern</TableHead>
+                            <TableHead>Freischalten</TableHead>
                             <TableHead>Beigetreten</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -136,10 +155,29 @@ function RoleManagement() {
                                                 onValueChange={(newRole) => changeRole(u.id, newRole)}
                                                 className="w-36"
                                             >
-                                                {Object.entries(ROLE_CONFIG).map(([key, cfg]) => (
-                                                    <SelectOption key={key} value={key}>{cfg.label}</SelectOption>
-                                                ))}
+                                                {Object.entries(ROLE_CONFIG)
+                                                    .filter(([key]) => key !== 'pending')
+                                                    .map(([key, cfg]) => (
+                                                        <SelectOption key={key} value={key}>{cfg.label}</SelectOption>
+                                                    ))}
                                             </Select>
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        {u.role === 'pending' ? (
+                                            <Button
+                                                size="sm"
+                                                className="gap-1.5"
+                                                onClick={() => approveUser(u.id, 'member')}
+                                            >
+                                                <UserCheck className="h-3.5 w-3.5" />
+                                                Freischalten
+                                            </Button>
+                                        ) : (
+                                            <Badge variant="outline" className="gap-1 text-green-500 border-green-500/30">
+                                                <CheckCircle className="h-3 w-3" />
+                                                Aktiv
+                                            </Badge>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">
@@ -150,7 +188,7 @@ function RoleManagement() {
                         })}
                         {users.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                                     Noch keine Benutzer registriert
                                 </TableCell>
                             </TableRow>

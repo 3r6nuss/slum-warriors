@@ -49,11 +49,21 @@ export function AuthProvider({ children }) {
 
     const isAdmin = user?.role === 'admin';
     const isModerator = user?.role === 'moderator' || isAdmin;
+    const isPending = user?.role === 'pending';
+    const isApproved = user?.approved === 1;
+
+    const refreshUser = async () => {
+        try {
+            const res = await fetch('/api/auth/me', { credentials: 'include' });
+            const data = await res.json();
+            setUser(data.user);
+        } catch (e) { /* ignore */ }
+    };
 
     return (
         <AuthContext.Provider value={{
-            user, loading, login, logout, handleCallback,
-            isAdmin, isModerator, isLoggedIn: !!user,
+            user, loading, login, logout, handleCallback, refreshUser,
+            isAdmin, isModerator, isPending, isApproved, isLoggedIn: !!user,
         }}>
             {children}
         </AuthContext.Provider>
