@@ -314,17 +314,19 @@ function Sidebar({ open, onClose }) {
           </div>
 
           {/* Buchhaltung section */}
-          <div className="mt-5 mb-2 px-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-              Verwaltung
-            </p>
-          </div>
-          <div className="space-y-1">
-            <BuchhaltungNavItem onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />
-
-            {/* Admin hover menu – only visible for admins */}
-            {isAdmin && <AdminNavItem onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />}
-          </div>
+          {(isAdmin || isLeadership) && (
+            <>
+              <div className="mt-5 mb-2 px-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                  Verwaltung
+                </p>
+              </div>
+              <div className="space-y-1">
+                <BuchhaltungNavItem onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />
+                {isAdmin && <AdminNavItem onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />}
+              </div>
+            </>
+          )}
         </nav>
 
         {/* User profile */}

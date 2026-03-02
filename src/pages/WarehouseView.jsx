@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '@/lib/auth';
 import { useInventorySocket } from '@/lib/websocket';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -15,6 +16,7 @@ const warehouseMeta = {
 };
 
 export default function WarehouseView({ warehouseId }) {
+    const { isAdmin, isLeadership } = useAuth();
     const { inventory, connected } = useInventorySocket();
     const [isEditing, setIsEditing] = useState(false);
     const [edits, setEdits] = useState({});
@@ -125,33 +127,35 @@ export default function WarehouseView({ warehouseId }) {
                             </p>
                         )}
                     </div>
-                    <div className="flex gap-2 relative top-2">
-                        {!isEditing ? (
-                            <>
-                                <Button variant="outline" size="sm" onClick={handleEditToggle}>
-                                    <Settings className="h-4 w-4 mr-2" />
-                                    Bearbeiten
-                                </Button>
-                                <Button variant="outline" size="sm" asChild>
-                                    <Link to={`/bestaetigen/${warehouseId}`}>
-                                        <ClipboardCheck className="h-4 w-4 mr-2" />
-                                        Bestätigen
-                                    </Link>
-                                </Button>
-                            </>
-                        ) : (
-                            <>
-                                <Button variant="ghost" size="sm" onClick={handleEditToggle} disabled={isSaving}>
-                                    <X className="h-4 w-4 mr-2" />
-                                    Abbrechen
-                                </Button>
-                                <Button size="sm" onClick={handleSave} disabled={isSaving}>
-                                    {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                                    Speichern
-                                </Button>
-                            </>
-                        )}
-                    </div>
+                    {(isAdmin || isLeadership) && (
+                        <div className="flex gap-2 relative top-2">
+                            {!isEditing ? (
+                                <>
+                                    <Button variant="outline" size="sm" onClick={handleEditToggle}>
+                                        <Settings className="h-4 w-4 mr-2" />
+                                        Bearbeiten
+                                    </Button>
+                                    <Button variant="outline" size="sm" asChild>
+                                        <Link to={`/bestaetigen/${warehouseId}`}>
+                                            <ClipboardCheck className="h-4 w-4 mr-2" />
+                                            Bestätigen
+                                        </Link>
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <Button variant="ghost" size="sm" onClick={handleEditToggle} disabled={isSaving}>
+                                        <X className="h-4 w-4 mr-2" />
+                                        Abbrechen
+                                    </Button>
+                                    <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                                        {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                                        Speichern
+                                    </Button>
+                                </>
+                            )}
+                        </div>
+                    )}
                 </CardHeader>
                 <CardContent>
                     <Table>
