@@ -62,7 +62,7 @@ function WarehouseNavItem({ warehouse, onClose, openMenu, setOpenMenu }) {
       </NavLink>
 
       <div
-        className={`overflow-hidden transition-all duration-250 ease-in-out ${isOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
+        className={`overflow-hidden transition-all duration-250 ease-in-out ${isOpen ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'
           }`}
       >
         <div className="ml-4 pl-3 border-l border-sidebar-border/50 space-y-0.5 py-1">
@@ -91,32 +91,6 @@ function WarehouseNavItem({ warehouse, onClose, openMenu, setOpenMenu }) {
           >
             <PackageMinus className="h-3.5 w-3.5" />
             Auslagern
-          </NavLink>
-          <NavLink
-            to={`/anpassen/${warehouse.id}`}
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
-                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
-                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
-              }`
-            }
-          >
-            <Settings className="h-3.5 w-3.5" />
-            Lager anpassen
-          </NavLink>
-          <NavLink
-            to={`/bestaetigen/${warehouse.id}`}
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
-                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
-                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
-              }`
-            }
-          >
-            <ClipboardCheck className="h-3.5 w-3.5" />
-            Lager bestätigen
           </NavLink>
         </div>
       </div>

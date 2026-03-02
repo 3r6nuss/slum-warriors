@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useInventorySocket } from '@/lib/websocket';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Package, Shield, Warehouse } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Package, Shield, Warehouse, Settings, ClipboardCheck } from 'lucide-react';
 
 const warehouseMeta = {
     1: { label: 'Führungslager', icon: Shield, type: 'leadership' },
@@ -43,8 +45,22 @@ export default function WarehouseView({ warehouseId }) {
             </div>
 
             <Card className="overflow-hidden backdrop-blur-sm bg-card/80 border-border/50">
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-3 flex flex-row items-center justify-between">
                     <CardTitle className="text-lg">Lagerbestand</CardTitle>
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" asChild>
+                            <Link to={`/anpassen/${warehouseId}`}>
+                                <Settings className="h-4 w-4 mr-2" />
+                                Bearbeiten
+                            </Link>
+                        </Button>
+                        <Button variant="outline" size="sm" asChild>
+                            <Link to={`/bestaetigen/${warehouseId}`}>
+                                <ClipboardCheck className="h-4 w-4 mr-2" />
+                                Bestätigen
+                            </Link>
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <Table>
