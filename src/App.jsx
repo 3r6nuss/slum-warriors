@@ -24,18 +24,19 @@ const warehouses = [
 
 
 
-function WarehouseNavItem({ warehouse, onClose }) {
-  const [hovered, setHovered] = useState(false);
+function WarehouseNavItem({ warehouse, onClose, openMenu, setOpenMenu }) {
+  const menuId = `wh-${warehouse.id}`;
+  const isOpen = openMenu === menuId;
   const Icon = warehouse.icon;
 
   return (
     <div
       className="relative"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => setOpenMenu(menuId)}
+      onMouseLeave={() => setOpenMenu(null)}
     >
       <div
-        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${hovered
+        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isOpen
           ? 'bg-sidebar-accent/50 text-sidebar-foreground'
           : 'text-sidebar-foreground/70'
           }`}
@@ -45,13 +46,13 @@ function WarehouseNavItem({ warehouse, onClose }) {
           <span>{warehouse.label}</span>
         </div>
         <ChevronRight
-          className={`h-3.5 w-3.5 transition-transform duration-200 ${hovered ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
+          className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
             }`}
         />
       </div>
 
       <div
-        className={`overflow-hidden transition-all duration-250 ease-in-out ${hovered ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
+        className={`overflow-hidden transition-all duration-250 ease-in-out ${isOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
           }`}
       >
         <div className="ml-4 pl-3 border-l border-sidebar-border/50 space-y-0.5 py-1">
@@ -113,17 +114,17 @@ function WarehouseNavItem({ warehouse, onClose }) {
   );
 }
 
-function AdminNavItem({ onClose }) {
-  const [hovered, setHovered] = useState(false);
+function AdminNavItem({ onClose, openMenu, setOpenMenu }) {
+  const isOpen = openMenu === 'admin';
 
   return (
     <div
       className="relative"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => setOpenMenu('admin')}
+      onMouseLeave={() => setOpenMenu(null)}
     >
       <div
-        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${hovered
+        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isOpen
           ? 'bg-sidebar-accent/50 text-sidebar-foreground'
           : 'text-sidebar-foreground/70'
           }`}
@@ -133,13 +134,13 @@ function AdminNavItem({ onClose }) {
           <span>Admin</span>
         </div>
         <ChevronRight
-          className={`h-3.5 w-3.5 transition-transform duration-200 ${hovered ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
+          className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
             }`}
         />
       </div>
 
       <div
-        className={`overflow-hidden transition-all duration-250 ease-in-out ${hovered ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
+        className={`overflow-hidden transition-all duration-250 ease-in-out ${isOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
           }`}
       >
         <div className="ml-4 pl-3 border-l border-sidebar-border/50 space-y-0.5 py-1">
@@ -175,17 +176,17 @@ function AdminNavItem({ onClose }) {
   );
 }
 
-function BuchhaltungNavItem({ onClose }) {
-  const [hovered, setHovered] = useState(false);
+function BuchhaltungNavItem({ onClose, openMenu, setOpenMenu }) {
+  const isOpen = openMenu === 'buchhaltung';
 
   return (
     <div
       className="relative"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => setOpenMenu('buchhaltung')}
+      onMouseLeave={() => setOpenMenu(null)}
     >
       <div
-        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${hovered
+        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isOpen
           ? 'bg-sidebar-accent/50 text-sidebar-foreground'
           : 'text-sidebar-foreground/70'
           }`}
@@ -195,13 +196,13 @@ function BuchhaltungNavItem({ onClose }) {
           <span>Buchhaltung</span>
         </div>
         <ChevronRight
-          className={`h-3.5 w-3.5 transition-transform duration-200 ${hovered ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
+          className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
             }`}
         />
       </div>
 
       <div
-        className={`overflow-hidden transition-all duration-250 ease-in-out ${hovered ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
+        className={`overflow-hidden transition-all duration-250 ease-in-out ${isOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
           }`}
       >
         <div className="ml-4 pl-3 border-l border-sidebar-border/50 space-y-0.5 py-1">
@@ -287,6 +288,7 @@ function UserProfile() {
 
 function Sidebar({ open, onClose }) {
   const { isAdmin } = useAuth();
+  const [openMenu, setOpenMenu] = useState(null);
 
   return (
     <>
@@ -341,7 +343,7 @@ function Sidebar({ open, onClose }) {
           </div>
           <div className="space-y-1">
             {warehouses.map((wh) => (
-              <WarehouseNavItem key={wh.id} warehouse={wh} onClose={onClose} />
+              <WarehouseNavItem key={wh.id} warehouse={wh} onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />
             ))}
           </div>
 
@@ -352,10 +354,10 @@ function Sidebar({ open, onClose }) {
             </p>
           </div>
           <div className="space-y-1">
-            <BuchhaltungNavItem onClose={onClose} />
+            <BuchhaltungNavItem onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />
 
             {/* Admin hover menu – only visible for admins */}
-            {isAdmin && <AdminNavItem onClose={onClose} />}
+            {isAdmin && <AdminNavItem onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />}
           </div>
         </nav>
 
