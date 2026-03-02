@@ -211,5 +211,23 @@ router.put('/users/:id/approve', requireAdmin, (req, res) => {
     res.json({ success: true, message: `Benutzer freigeschaltet mit Rolle "${targetRole}"` });
 });
 
+// PUT /api/auth/users/:id/revoke – revoke approval, set user back to pending (admin only)
+router.put('/users/:id/revoke', requireAdmin, (req, res) => {
+    const { id } = req.params;
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!user) {
+        return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+    }
+
+    // Prevent revoking the hard-coded admin
+    if (user.discord_id === ADMIN_DISCORD_ID) {
+        return res.status(403).json({ error: 'Der Hauptadmin kann nicht gesperrt werden' });
+    }
+
+    db.prepare(`UPDATE users SET role = 'pending', approved = 0, updated_at = datetime('now','localtime') WHERE id = ?`).run(id);
+    res.json({ success: true, message: `Freischaltung für "${user.username}" wurde zurückgesetzt` });
+});
+
 module.exports = router;
 module.exports.requireAdmin = requireAdmin;

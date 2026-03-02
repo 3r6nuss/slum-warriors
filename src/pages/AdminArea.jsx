@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/lib/auth';
 import {
     ShieldCheck, Users, ScrollText, Crown, Shield, User, Eye,
-    CheckCircle, AlertCircle, Swords, Clock, UserCheck
+    CheckCircle, AlertCircle, Swords, Clock, UserCheck, UserX
 } from 'lucide-react';
 
 const HARDCODED_IDS = [
@@ -75,6 +75,25 @@ function RoleManagement() {
             }
         } catch (err) {
             setStatus({ type: 'error', message: 'Fehler beim Freischalten' });
+        }
+    };
+
+    const revokeUser = async (userId) => {
+        try {
+            const res = await fetch(`/api/auth/users/${userId}/revoke`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setStatus({ type: 'success', message: data.message });
+                loadUsers();
+            } else {
+                setStatus({ type: 'error', message: data.error });
+            }
+        } catch (err) {
+            setStatus({ type: 'error', message: 'Fehler beim Zurücksetzen' });
         }
     };
 
@@ -173,11 +192,21 @@ function RoleManagement() {
                                                 <UserCheck className="h-3.5 w-3.5" />
                                                 Freischalten
                                             </Button>
-                                        ) : (
+                                        ) : isProtected || isCurrentUser ? (
                                             <Badge variant="outline" className="gap-1 text-green-500 border-green-500/30">
                                                 <CheckCircle className="h-3 w-3" />
                                                 Aktiv
                                             </Badge>
+                                        ) : (
+                                            <Button
+                                                size="sm"
+                                                variant="destructive"
+                                                className="gap-1.5"
+                                                onClick={() => revokeUser(u.id)}
+                                            >
+                                                <UserX className="h-3.5 w-3.5" />
+                                                Sperren
+                                            </Button>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-xs text-muted-foreground">
