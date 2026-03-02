@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AuthProvider, useAuth } from '@/lib/auth';
-import Dashboard from '@/pages/Dashboard';
+import WarehouseView from '@/pages/WarehouseView';
 import CheckInForm from '@/pages/CheckInForm';
 import CheckOutForm from '@/pages/CheckOutForm';
 import AdjustStock from '@/pages/AdjustStock';
@@ -29,24 +29,37 @@ function WarehouseNavItem({ warehouse, onClose, openMenu, setOpenMenu }) {
   const isOpen = openMenu === menuId;
   const Icon = warehouse.icon;
 
+  const handleToggle = (e) => {
+    e.preventDefault();
+    setOpenMenu(isOpen ? null : menuId);
+  };
+
   return (
     <div className="relative">
-      <div
-        onClick={() => setOpenMenu(isOpen ? null : menuId)}
-        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isOpen
-          ? 'bg-sidebar-accent/50 text-sidebar-foreground'
-          : 'text-sidebar-foreground/70'
-          }`}
+      <NavLink
+        to={`/lager/${warehouse.id}`}
+        onClick={onClose}
+        className={({ isActive }) =>
+          `flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isActive || isOpen
+            ? 'bg-sidebar-accent/50 text-sidebar-foreground'
+            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/30'
+          }`
+        }
       >
         <div className="flex items-center gap-3">
           <Icon className="h-4 w-4" />
           <span>{warehouse.label}</span>
         </div>
-        <ChevronRight
-          className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
-            }`}
-        />
-      </div>
+        <div
+          onClick={handleToggle}
+          className="p-1 rounded-md hover:bg-sidebar-accent/50"
+        >
+          <ChevronRight
+            className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
+              }`}
+          />
+        </div>
+      </NavLink>
 
       <div
         className={`overflow-hidden transition-all duration-250 ease-in-out ${isOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
@@ -311,20 +324,6 @@ function Sidebar({ open, onClose }) {
 
         {/* Navigation */}
         <nav className="flex-1 p-4 overflow-y-auto">
-          <NavLink
-            to="/"
-            end
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
-                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm'
-                : 'text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50'
-              }`
-            }
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            Dashboard
-          </NavLink>
 
           {/* Lager section */}
           <div className="mt-5 mb-2 px-3">
@@ -357,6 +356,11 @@ function Sidebar({ open, onClose }) {
       </aside>
     </>
   );
+}
+
+function WarehouseViewWrapper() {
+  const { warehouseId } = useParams();
+  return <WarehouseView warehouseId={warehouseId} />;
 }
 
 function CheckInWrapper() {
@@ -415,7 +419,8 @@ function AppShell() {
 
         <main className="p-6 lg:p-8 max-w-7xl mx-auto">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Navigate to="/lager/2" replace />} />
+            <Route path="/lager/:warehouseId" element={<WarehouseViewWrapper />} />
             <Route path="/einlagern/:warehouseId" element={<CheckInWrapper />} />
             <Route path="/auslagern/:warehouseId" element={<CheckOutWrapper />} />
             <Route path="/anpassen/:warehouseId" element={<AdjustStockWrapper />} />
