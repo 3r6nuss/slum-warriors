@@ -30,12 +30,9 @@ function WarehouseNavItem({ warehouse, onClose, openMenu, setOpenMenu }) {
   const Icon = warehouse.icon;
 
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setOpenMenu(menuId)}
-      onMouseLeave={() => setOpenMenu(null)}
-    >
+    <div className="relative">
       <div
+        onClick={() => setOpenMenu(isOpen ? null : menuId)}
         className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isOpen
           ? 'bg-sidebar-accent/50 text-sidebar-foreground'
           : 'text-sidebar-foreground/70'
@@ -118,12 +115,9 @@ function AdminNavItem({ onClose, openMenu, setOpenMenu }) {
   const isOpen = openMenu === 'admin';
 
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setOpenMenu('admin')}
-      onMouseLeave={() => setOpenMenu(null)}
-    >
+    <div className="relative">
       <div
+        onClick={() => setOpenMenu(isOpen ? null : 'admin')}
         className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isOpen
           ? 'bg-sidebar-accent/50 text-sidebar-foreground'
           : 'text-sidebar-foreground/70'
@@ -180,12 +174,9 @@ function BuchhaltungNavItem({ onClose, openMenu, setOpenMenu }) {
   const isOpen = openMenu === 'buchhaltung';
 
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setOpenMenu('buchhaltung')}
-      onMouseLeave={() => setOpenMenu(null)}
-    >
+    <div className="relative">
       <div
+        onClick={() => setOpenMenu(isOpen ? null : 'buchhaltung')}
         className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isOpen
           ? 'bg-sidebar-accent/50 text-sidebar-foreground'
           : 'text-sidebar-foreground/70'
