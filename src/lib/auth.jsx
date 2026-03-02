@@ -48,6 +48,7 @@ export function AuthProvider({ children }) {
     };
 
     const isAdmin = user?.role === 'admin';
+    const isLeadership = user?.role === 'führung' || isAdmin;
     const isModerator = user?.role === 'moderator' || isAdmin;
     const isPending = user?.role === 'pending';
     const isApproved = user?.approved === 1;
@@ -63,7 +64,7 @@ export function AuthProvider({ children }) {
     return (
         <AuthContext.Provider value={{
             user, loading, login, logout, handleCallback, refreshUser,
-            isAdmin, isModerator, isPending, isApproved, isLoggedIn: !!user,
+            isAdmin, isLeadership, isModerator, isPending, isApproved, isLoggedIn: !!user,
         }}>
             {children}
         </AuthContext.Provider>

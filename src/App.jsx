@@ -265,7 +265,7 @@ function UserProfile() {
 }
 
 function Sidebar({ open, onClose }) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isLeadership } = useAuth();
   const [openMenu, setOpenMenu] = useState(null);
 
   return (
@@ -306,9 +306,11 @@ function Sidebar({ open, onClose }) {
             </p>
           </div>
           <div className="space-y-1">
-            {warehouses.map((wh) => (
-              <WarehouseNavItem key={wh.id} warehouse={wh} onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />
-            ))}
+            {warehouses
+              .filter(wh => wh.type !== 'leadership' || isLeadership)
+              .map((wh) => (
+                <WarehouseNavItem key={wh.id} warehouse={wh} onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />
+              ))}
           </div>
 
           {/* Buchhaltung section */}
@@ -334,21 +336,29 @@ function Sidebar({ open, onClose }) {
 
 function WarehouseViewWrapper() {
   const { warehouseId } = useParams();
+  const { isLeadership } = useAuth();
+  if (warehouseId === '1' && !isLeadership) return <Navigate to="/lager/2" replace />;
   return <WarehouseView warehouseId={warehouseId} />;
 }
 
 function CheckInWrapper() {
   const { warehouseId } = useParams();
+  const { isLeadership } = useAuth();
+  if (warehouseId === '1' && !isLeadership) return <Navigate to="/lager/2" replace />;
   return <CheckInForm preselectedWarehouse={warehouseId} />;
 }
 
 function CheckOutWrapper() {
   const { warehouseId } = useParams();
+  const { isLeadership } = useAuth();
+  if (warehouseId === '1' && !isLeadership) return <Navigate to="/lager/2" replace />;
   return <CheckOutForm preselectedWarehouse={warehouseId} />;
 }
 
 function AdjustStockWrapper() {
   const { warehouseId } = useParams();
+  const { isLeadership } = useAuth();
+  if (warehouseId === '1' && !isLeadership) return <Navigate to="/lager/2" replace />;
   return <AdjustStock preselectedWarehouse={warehouseId} />;
 }
 
