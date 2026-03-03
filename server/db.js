@@ -70,6 +70,11 @@ if (!userColumns.find(c => c.name === 'approved')) {
   db.exec(`UPDATE users SET approved = 1`);
 }
 
+// Migration: Add 'display_name' column to users table if missing
+if (!userColumns.find(c => c.name === 'display_name')) {
+  db.exec(`ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT NULL`);
+}
+
 // Seed warehouses if not exist
 const warehouseCount = db.prepare('SELECT COUNT(*) as count FROM warehouses').get();
 if (warehouseCount.count === 0) {

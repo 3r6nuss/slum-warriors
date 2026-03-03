@@ -6,14 +6,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectOption } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { PackagePlus, CheckCircle, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 
 export default function CheckInForm({ preselectedWarehouse }) {
+    const { user } = useAuth();
     const [warehouses, setWarehouses] = useState([]);
     const [products, setProducts] = useState([]);
     const [warehouseId, setWarehouseId] = useState(preselectedWarehouse || '');
     const [productId, setProductId] = useState('');
     const [quantity, setQuantity] = useState('');
-    const [personName, setPersonName] = useState('');
+    const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(false);
 

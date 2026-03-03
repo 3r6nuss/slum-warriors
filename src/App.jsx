@@ -247,7 +247,10 @@ function UserProfile() {
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-sidebar-foreground truncate">{user.username}</p>
+          <p className="text-sm font-medium text-sidebar-foreground truncate">{user.display_name || user.username}</p>
+          {user.display_name && (
+            <p className="text-[11px] text-sidebar-foreground/40 truncate">@{user.username}</p>
+          )}
           <p className="text-xs text-sidebar-foreground/50 capitalize">{user.role}</p>
         </div>
       </div>

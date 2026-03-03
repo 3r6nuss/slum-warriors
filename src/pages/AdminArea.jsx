@@ -5,10 +5,12 @@ import { Select, SelectOption } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
 import { useAuth } from '@/lib/auth';
 import {
     ShieldCheck, Users, ScrollText, Crown, Shield, User, Eye,
-    CheckCircle, AlertCircle, Swords, Clock, UserCheck, UserX
+    CheckCircle, AlertCircle, Swords, Clock, UserCheck, UserX,
+    Pencil, Check, X
 } from 'lucide-react';
 
 const HARDCODED_IDS = [
@@ -27,6 +29,7 @@ const ROLE_CONFIG = {
 function RoleManagement() {
     const [users, setUsers] = useState([]);
     const [status, setStatus] = useState(null);
+    const [editingName, setEditingName] = useState(null); // { userId, value }
     const { user: currentUser } = useAuth();
 
     const loadUsers = () => {
@@ -97,6 +100,27 @@ function RoleManagement() {
         }
     };
 
+    const setDisplayName = async (userId, displayName) => {
+        try {
+            const res = await fetch(`/api/auth/users/${userId}/display-name`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ display_name: displayName }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setStatus({ type: 'success', message: data.message });
+                setEditingName(null);
+                loadUsers();
+            } else {
+                setStatus({ type: 'error', message: data.error });
+            }
+        } catch (err) {
+            setStatus({ type: 'error', message: 'Fehler beim Setzen des Klarnamens' });
+        }
+    };
+
     return (
         <Card className="backdrop-blur-sm bg-card/80 border-border/50">
             <CardHeader>
@@ -119,6 +143,7 @@ function RoleManagement() {
                     <TableHeader>
                         <TableRow>
                             <TableHead>Benutzer</TableHead>
+                            <TableHead>Klarname</TableHead>
                             <TableHead>Discord ID</TableHead>
                             <TableHead>Aktuelle Rolle</TableHead>
                             <TableHead>Rolle ändern</TableHead>
@@ -158,6 +183,43 @@ function RoleManagement() {
                                     </TableCell>
                                     <TableCell className="font-mono text-xs text-muted-foreground">
                                         {u.discord_id}
+                                    </TableCell>
+                                    <TableCell>
+                                        {editingName?.userId === u.id ? (
+                                            <div className="flex items-center gap-1.5">
+                                                <Input
+                                                    value={editingName.value}
+                                                    onChange={(e) => setEditingName({ ...editingName, value: e.target.value })}
+                                                    className="h-8 w-36 text-sm"
+                                                    placeholder="Klarname..."
+                                                    autoFocus
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') setDisplayName(u.id, editingName.value);
+                                                        if (e.key === 'Escape') setEditingName(null);
+                                                    }}
+                                                />
+                                                <Button size="icon" variant="ghost" className="h-7 w-7 text-green-500" onClick={() => setDisplayName(u.id, editingName.value)}>
+                                                    <Check className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => setEditingName(null)}>
+                                                    <X className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-1.5 group">
+                                                <span className={`text-sm ${u.display_name ? 'font-medium' : 'text-muted-foreground italic'}`}>
+                                                    {u.display_name || 'Nicht gesetzt'}
+                                                </span>
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    onClick={() => setEditingName({ userId: u.id, value: u.display_name || '' })}
+                                                >
+                                                    <Pencil className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        )}
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant={roleInfo.color} className="gap-1">
@@ -217,7 +279,7 @@ function RoleManagement() {
                         })}
                         {users.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                                     Noch keine Benutzer registriert
                                 </TableCell>
                             </TableRow>

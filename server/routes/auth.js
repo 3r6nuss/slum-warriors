@@ -115,6 +115,7 @@ router.post('/callback', async (req, res) => {
             id: user.id,
             discord_id: user.discord_id,
             username: user.username,
+            display_name: user.display_name || null,
             avatar: user.avatar,
             role: user.role,
             approved: user.approved,
@@ -137,6 +138,7 @@ router.get('/me', (req, res) => {
                 id: user.id,
                 discord_id: user.discord_id,
                 username: user.username,
+                display_name: user.display_name || null,
                 avatar: user.avatar,
                 role: user.role,
                 approved: user.approved,
@@ -165,7 +167,7 @@ function requireAdmin(req, res, next) {
 
 // GET /api/auth/users – list all users (admin only)
 router.get('/users', requireAdmin, (req, res) => {
-    const users = db.prepare('SELECT id, discord_id, username, avatar, role, created_at, updated_at FROM users ORDER BY created_at DESC').all();
+    const users = db.prepare('SELECT id, discord_id, username, display_name, avatar, role, created_at, updated_at FROM users ORDER BY created_at DESC').all();
     res.json(users);
 });
 
@@ -227,6 +229,21 @@ router.put('/users/:id/revoke', requireAdmin, (req, res) => {
 
     db.prepare(`UPDATE users SET role = 'pending', approved = 0, updated_at = datetime('now','localtime') WHERE id = ?`).run(id);
     res.json({ success: true, message: `Freischaltung für "${user.username}" wurde zurückgesetzt` });
+});
+
+// PUT /api/auth/users/:id/display-name – set display name (admin only)
+router.put('/users/:id/display-name', requireAdmin, (req, res) => {
+    const { id } = req.params;
+    const { display_name } = req.body;
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!user) {
+        return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+    }
+
+    const trimmedName = display_name ? display_name.trim() : null;
+    db.prepare(`UPDATE users SET display_name = ?, updated_at = datetime('now','localtime') WHERE id = ?`).run(trimmedName, id);
+    res.json({ success: true, message: `Klarname auf "${trimmedName || '(entfernt)'}" gesetzt` });
 });
 
 module.exports = router;

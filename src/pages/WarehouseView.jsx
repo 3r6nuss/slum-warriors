@@ -16,11 +16,11 @@ const warehouseMeta = {
 };
 
 export default function WarehouseView({ warehouseId }) {
-    const { isAdmin, isLeadership } = useAuth();
+    const { isAdmin, isLeadership, user } = useAuth();
     const { inventory, connected } = useInventorySocket();
     const [isEditing, setIsEditing] = useState(false);
     const [edits, setEdits] = useState({});
-    const [personName, setPersonName] = useState('');
+    const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
     const [reason, setReason] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [status, setStatus] = useState(null);

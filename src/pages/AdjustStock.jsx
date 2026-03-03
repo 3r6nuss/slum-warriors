@@ -9,8 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Settings, CheckCircle, AlertCircle, ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 
 export default function AdjustStock({ preselectedWarehouse }) {
+    const { user } = useAuth();
     const [warehouses, setWarehouses] = useState([]);
     const [products, setProducts] = useState([]);
     const [inventory, setInventory] = useState([]);
@@ -18,7 +20,7 @@ export default function AdjustStock({ preselectedWarehouse }) {
     const [warehouseId, setWarehouseId] = useState(preselectedWarehouse || '');
     const [productId, setProductId] = useState('');
     const [newQuantity, setNewQuantity] = useState('');
-    const [personName, setPersonName] = useState('');
+    const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
     const [reason, setReason] = useState('');
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(false);
