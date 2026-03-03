@@ -181,9 +181,6 @@ function RoleManagement() {
                                             </div>
                                         </div>
                                     </TableCell>
-                                    <TableCell className="font-mono text-xs text-muted-foreground">
-                                        {u.discord_id}
-                                    </TableCell>
                                     <TableCell>
                                         {editingName?.userId === u.id ? (
                                             <div className="flex items-center gap-1.5">
@@ -220,6 +217,9 @@ function RoleManagement() {
                                                 </Button>
                                             </div>
                                         )}
+                                    </TableCell>
+                                    <TableCell className="font-mono text-xs text-muted-foreground">
+                                        {u.discord_id}
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant={roleInfo.color} className="gap-1">

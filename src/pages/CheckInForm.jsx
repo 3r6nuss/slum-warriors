@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectOption } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { PackagePlus, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 

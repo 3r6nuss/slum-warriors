@@ -1,9 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, NavLink, useParams, Navigate } from 'react-router-dom';
 import { useState } from 'react';
 import {
-  LayoutDashboard, PackagePlus, PackageMinus, Settings,
+  PackagePlus, PackageMinus,
   ScrollText, User, Users, Menu, Swords, Shield, Warehouse,
-  ChevronRight, ShieldCheck, LogOut, BookOpen, ClipboardCheck, BarChart3
+  ChevronRight, ShieldCheck, LogOut, BookOpen, BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AuthProvider, useAuth } from '@/lib/auth';
@@ -21,8 +21,6 @@ const warehouses = [
   { id: 2, label: 'Normales Lager', icon: Warehouse, type: 'normal' },
   { id: 1, label: 'Führungslager', icon: Shield, type: 'leadership' },
 ];
-
-
 
 function WarehouseNavItem({ warehouse, onClose, openMenu, setOpenMenu }) {
   const menuId = `wh-${warehouse.id}`;
