@@ -21,7 +21,7 @@ const warehouseMeta = {
 function TransactionDialog({ item, warehouseId, user, onClose }) {
     const [mode, setMode] = useState(null); // 'checkin' | 'checkout'
     const [quantity, setQuantity] = useState('');
-    const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
+    const [personName, setPersonName] = useState(user?.display_name || '');
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState(null);
 
@@ -213,7 +213,7 @@ export default function WarehouseView() {
     // Inline edit state (for admins/leadership)
     const [isEditing, setIsEditing] = useState(false);
     const [edits, setEdits] = useState({});
-    const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
+    const [personName, setPersonName] = useState(user?.display_name || '');
     const [reason, setReason] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [editStatus, setEditStatus] = useState(null);
