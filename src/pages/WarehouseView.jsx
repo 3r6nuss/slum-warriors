@@ -387,59 +387,59 @@ export default function WarehouseView() {
                     )}
                 </CardHeader>
                 <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Produkt</TableHead>
-                                <TableHead className="text-right">Bestand</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {warehouseItems.map((item) => (
-                                <TableRow
-                                    key={item.id}
-                                    className={`group ${!isEditing ? 'cursor-pointer hover:bg-accent/10' : ''}`}
-                                    onClick={() => {
-                                        if (!isEditing) setSelectedItem(item);
-                                    }}
-                                >
-                                    <TableCell className="font-medium">
-                                        <div className="flex items-center gap-2">
-                                            <Package className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                                            <span className="group-hover:text-primary transition-colors">
-                                                {item.product_name}
-                                            </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mt-4">
+                        {warehouseItems.map((item) => (
+                            <div
+                                key={item.id}
+                                className={`group relative flex flex-col p-4 rounded-xl border transition-all duration-200 ${!isEditing
+                                        ? 'cursor-pointer border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
+                                        : 'border-border/50 bg-card'
+                                    }`}
+                                onClick={() => {
+                                    if (!isEditing) setSelectedItem(item);
+                                }}
+                            >
+                                <div className="flex items-start justify-between mb-3">
+                                    <div className={`p-2 rounded-lg transition-colors ${!isEditing ? 'bg-secondary group-hover:bg-primary/10' : 'bg-secondary'}`}>
+                                        <Package className={`h-5 w-5 ${!isEditing ? 'text-muted-foreground group-hover:text-primary' : 'text-muted-foreground'}`} />
+                                    </div>
+                                    {!isEditing && (
+                                        <Badge variant={item.quantity > 0 ? (item.quantity > 10 ? 'success' : 'warning') : 'destructive'}>
+                                            {item.quantity}
+                                        </Badge>
+                                    )}
+                                </div>
+
+                                <div className="flex-1">
+                                    <h3 className={`font-semibold text-sm line-clamp-2 ${!isEditing ? 'group-hover:text-primary transition-colors' : ''}`}>
+                                        {item.product_name}
+                                    </h3>
+                                </div>
+
+                                {isEditing && (
+                                    <div className="mt-3 pt-3 border-t border-border/50">
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-xs text-muted-foreground">Bestand:</span>
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                value={edits[item.product_id] || ''}
+                                                onChange={(e) => setEdits({ ...edits, [item.product_id]: e.target.value })}
+                                                className="w-20 text-right h-8 text-sm"
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
                                         </div>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {!isEditing ? (
-                                            <Badge variant={item.quantity > 0 ? (item.quantity > 10 ? 'success' : 'warning') : 'destructive'}>
-                                                {item.quantity}
-                                            </Badge>
-                                        ) : (
-                                            <div className="flex justify-end">
-                                                <Input
-                                                    type="number"
-                                                    min="0"
-                                                    value={edits[item.product_id] || ''}
-                                                    onChange={(e) => setEdits({ ...edits, [item.product_id]: e.target.value })}
-                                                    className="w-24 text-right h-8"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                />
-                                            </div>
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                            {warehouseItems.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={2} className="text-center text-muted-foreground py-8">
-                                        Keine Produkte im Lager
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                    {warehouseItems.length === 0 && (
+                        <div className="text-center text-muted-foreground py-12 border-2 border-dashed border-border/50 rounded-xl mt-4">
+                            <Package className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
+                            <p>Keine Produkte im Lager</p>
+                        </div>
+                    )}
 
                     {isEditing && (
                         <div className="mt-6 p-4 bg-muted/50 rounded-lg space-y-4 border border-border/50">
