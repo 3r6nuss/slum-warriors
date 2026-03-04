@@ -1,24 +1,50 @@
 const { WebSocketServer } = require('ws');
 const db = require('./db');
+const { log } = require('./logger');
 
 let wss = null;
+let statsInterval = null;
 
 function initWebSocket(server) {
     wss = new WebSocketServer({ server });
 
     wss.on('connection', (ws) => {
-        console.log('[WS] Client connected');
+        log('WS', `Client connected (total: ${wss.clients.size})`);
 
         // Send current inventory immediately on connect
         const inventory = getFullInventory();
         ws.send(JSON.stringify({ type: 'inventory_update', data: inventory }));
 
         ws.on('close', () => {
-            console.log('[WS] Client disconnected');
+            log('WS', `Client disconnected (total: ${wss.clients.size})`);
         });
     });
 
-    console.log('[WS] WebSocket server initialized');
+    // Record WS connection count every 5 minutes
+    statsInterval = setInterval(() => {
+        const count = getConnectedCount();
+        try {
+            db.prepare(
+                'INSERT INTO ws_connection_stats (connected_clients) VALUES (?)'
+            ).run(count);
+            log('WS', `Stats snapshot: ${count} connected client(s)`);
+        } catch (err) {
+            log('WS', `Failed to record stats: ${err.message}`, 'ERROR');
+        }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    // Record an initial snapshot on startup
+    try {
+        db.prepare(
+            'INSERT INTO ws_connection_stats (connected_clients) VALUES (?)'
+        ).run(0);
+    } catch (_) { /* ignore */ }
+
+    log('WS', 'WebSocket server initialized');
+}
+
+function getConnectedCount() {
+    return wss ? wss.clients.size : 0;
 }
 
 function getFullInventory() {
@@ -51,4 +77,4 @@ function broadcastInventory() {
     });
 }
 
-module.exports = { initWebSocket, broadcastInventory, getFullInventory };
+module.exports = { initWebSocket, broadcastInventory, getFullInventory, getConnectedCount };

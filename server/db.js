@@ -61,6 +61,12 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
   );
 
+  CREATE TABLE IF NOT EXISTS ws_connection_stats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    connected_clients INTEGER NOT NULL,
+    recorded_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     discord_id TEXT NOT NULL UNIQUE,

@@ -4,6 +4,7 @@ const path = require('path');
 const http = require('http');
 const session = require('express-session');
 const { initWebSocket } = require('./websocket');
+const { log, requestLoggerMiddleware } = require('./logger');
 
 // Initialize DB (runs schema + seed)
 require('./db');
@@ -21,6 +22,7 @@ app.use(cors({
     credentials: true,
 }));
 app.use(express.json());
+app.use(requestLoggerMiddleware);
 
 // Session middleware
 app.use(session({
@@ -42,6 +44,7 @@ app.use('/api/products', require('./routes/products'));
 app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/adjustments', require('./routes/adjustments'));
+app.use('/api/admin', require('./routes/admin'));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -67,7 +70,7 @@ initWebSocket(server);
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Server] Slum Warriors Lagerverwaltung API läuft auf Port ${PORT}`);
-    console.log(`[Server] Mode: ${isProduction ? 'Production' : 'Development'}`);
-    console.log(`[Server] WebSocket verfügbar auf ws://0.0.0.0:${PORT}`);
+    log('SERVER', `Slum Warriors Lagerverwaltung API läuft auf Port ${PORT}`);
+    log('SERVER', `Mode: ${isProduction ? 'Production' : 'Development'}`);
+    log('SERVER', `WebSocket verfügbar auf ws://0.0.0.0:${PORT}`);
 });
