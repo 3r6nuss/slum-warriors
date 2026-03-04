@@ -256,7 +256,10 @@ export default function WarehouseView() {
         const changesToMake = warehouseItems.filter(item => {
             const newVal = edits[item.product_id];
             return newVal !== undefined && newVal !== '' && parseInt(newVal) !== item.quantity;
-        });
+        }).map(item => ({
+            product_id: item.product_id,
+            new_quantity: parseInt(edits[item.product_id])
+        }));
 
         if (changesToMake.length === 0) {
             setEditStatus({ type: 'error', message: 'Keine Änderungen vorgenommen.' });
@@ -266,35 +269,32 @@ export default function WarehouseView() {
 
         setIsSaving(true);
         setEditStatus(null);
-        let errorCount = 0;
 
-        for (const item of changesToMake) {
-            try {
-                const res = await fetch('/api/adjustments', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        warehouse_id: parseInt(warehouseId),
-                        product_id: item.product_id,
-                        new_quantity: parseInt(edits[item.product_id]),
-                        person_name: personName,
-                        reason: reason || undefined,
-                    }),
-                });
-                if (!res.ok) errorCount++;
-            } catch {
-                errorCount++;
+        try {
+            const res = await fetch('/api/adjustments/batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    warehouse_id: parseInt(warehouseId),
+                    person_name: personName,
+                    reason: reason || undefined,
+                    changes: changesToMake
+                }),
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                setEditStatus({ type: 'success', message: data.message });
+                setIsEditing(false);
+                setReason('');
+            } else {
+                setEditStatus({ type: 'error', message: data.error || 'Fehler beim Speichern.' });
             }
+        } catch (err) {
+            setEditStatus({ type: 'error', message: 'Verbindungsfehler.' });
         }
 
         setIsSaving(false);
-        if (errorCount === 0) {
-            setEditStatus({ type: 'success', message: `${changesToMake.length} Produkte aktualisiert.` });
-            setIsEditing(false);
-            setReason('');
-        } else {
-            setEditStatus({ type: 'error', message: `Fehler beim Speichern von ${errorCount} Produkten.` });
-        }
     };
 
     const availableWarehouses = isLeadership
@@ -392,8 +392,8 @@ export default function WarehouseView() {
                             <div
                                 key={item.id}
                                 className={`group relative flex flex-col p-4 rounded-xl border transition-all duration-200 ${!isEditing
-                                        ? 'cursor-pointer border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
-                                        : 'border-border/50 bg-card'
+                                    ? 'cursor-pointer border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
+                                    : 'border-border/50 bg-card'
                                     }`}
                                 onClick={() => {
                                     if (!isEditing) setSelectedItem(item);
