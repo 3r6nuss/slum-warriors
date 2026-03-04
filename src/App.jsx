@@ -1,233 +1,17 @@
-import { BrowserRouter as Router, Routes, Route, NavLink, useParams, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useState } from 'react';
 import {
-  PackagePlus, PackageMinus,
-  ScrollText, User, Users, Menu, Swords, Shield, Warehouse,
-  ChevronRight, ShieldCheck, LogOut, BookOpen, BarChart3
+  User, Menu, Swords, Shield, Warehouse,
+  ShieldCheck, LogOut, Users
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import WarehouseView from '@/pages/WarehouseView';
-import CheckInForm from '@/pages/CheckInForm';
-import CheckOutForm from '@/pages/CheckOutForm';
-import AdjustStock from '@/pages/AdjustStock';
-import Protocols from '@/pages/Protocols';
-import PersonProtocol from '@/pages/PersonProtocol';
 import AdminArea from '@/pages/AdminArea';
-import StockLevels from '@/pages/StockLevels';
 import { LoginPage, AuthCallback, PendingPage } from '@/pages/Login';
 
-const warehouses = [
-  { id: 2, label: 'Normales Lager', icon: Warehouse, type: 'normal' },
-  { id: 1, label: 'Führungslager', icon: Shield, type: 'leadership' },
-];
-
-function WarehouseNavItem({ warehouse, onClose, openMenu, setOpenMenu }) {
-  const menuId = `wh-${warehouse.id}`;
-  const isOpen = openMenu === menuId;
-  const Icon = warehouse.icon;
-
-  const handleToggle = (e) => {
-    e.preventDefault();
-    setOpenMenu(isOpen ? null : menuId);
-  };
-
-  return (
-    <div className="relative">
-      <NavLink
-        to={`/lager/${warehouse.id}`}
-        onClick={onClose}
-        className={({ isActive }) =>
-          `flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isActive || isOpen
-            ? 'bg-sidebar-accent/50 text-sidebar-foreground'
-            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/30'
-          }`
-        }
-      >
-        <div className="flex items-center gap-3">
-          <Icon className="h-4 w-4" />
-          <span>{warehouse.label}</span>
-        </div>
-        <div
-          onClick={handleToggle}
-          className="p-1 rounded-md hover:bg-sidebar-accent/50"
-        >
-          <ChevronRight
-            className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
-              }`}
-          />
-        </div>
-      </NavLink>
-
-      <div
-        className={`overflow-hidden transition-all duration-250 ease-in-out ${isOpen ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'
-          }`}
-      >
-        <div className="ml-4 pl-3 border-l border-sidebar-border/50 space-y-0.5 py-1">
-          <NavLink
-            to={`/einlagern/${warehouse.id}`}
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
-                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
-                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
-              }`
-            }
-          >
-            <PackagePlus className="h-3.5 w-3.5" />
-            Einlagern
-          </NavLink>
-          <NavLink
-            to={`/auslagern/${warehouse.id}`}
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
-                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
-                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
-              }`
-            }
-          >
-            <PackageMinus className="h-3.5 w-3.5" />
-            Auslagern
-          </NavLink>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdminNavItem({ onClose, openMenu, setOpenMenu }) {
-  const isOpen = openMenu === 'admin';
-
-  return (
-    <div className="relative">
-      <div
-        onClick={() => setOpenMenu(isOpen ? null : 'admin')}
-        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isOpen
-          ? 'bg-sidebar-accent/50 text-sidebar-foreground'
-          : 'text-sidebar-foreground/70'
-          }`}
-      >
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="h-4 w-4" />
-          <span>Admin</span>
-        </div>
-        <ChevronRight
-          className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
-            }`}
-        />
-      </div>
-
-      <div
-        className={`overflow-hidden transition-all duration-250 ease-in-out ${isOpen ? 'max-h-32 opacity-100' : 'max-h-0 opacity-0'
-          }`}
-      >
-        <div className="ml-4 pl-3 border-l border-sidebar-border/50 space-y-0.5 py-1">
-          <NavLink
-            to="/admin"
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
-                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
-                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
-              }`
-            }
-          >
-            <Users className="h-3.5 w-3.5" />
-            Rollenverwaltung
-          </NavLink>
-          <NavLink
-            to="/admin/logs"
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
-                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
-                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
-              }`
-            }
-          >
-            <ScrollText className="h-3.5 w-3.5" />
-            System-Logs
-          </NavLink>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BuchhaltungNavItem({ onClose, openMenu, setOpenMenu }) {
-  const isOpen = openMenu === 'buchhaltung';
-
-  return (
-    <div className="relative">
-      <div
-        onClick={() => setOpenMenu(isOpen ? null : 'buchhaltung')}
-        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isOpen
-          ? 'bg-sidebar-accent/50 text-sidebar-foreground'
-          : 'text-sidebar-foreground/70'
-          }`}
-      >
-        <div className="flex items-center gap-3">
-          <BookOpen className="h-4 w-4" />
-          <span>Buchhaltung</span>
-        </div>
-        <ChevronRight
-          className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-90 text-sidebar-primary' : 'text-sidebar-foreground/40'
-            }`}
-        />
-      </div>
-
-      <div
-        className={`overflow-hidden transition-all duration-250 ease-in-out ${isOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
-          }`}
-      >
-        <div className="ml-4 pl-3 border-l border-sidebar-border/50 space-y-0.5 py-1">
-          <NavLink
-            to="/protokolle"
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
-                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
-                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
-              }`
-            }
-          >
-            <ScrollText className="h-3.5 w-3.5" />
-            Protokolle
-          </NavLink>
-          <NavLink
-            to="/person"
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
-                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
-                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
-              }`
-            }
-          >
-            <User className="h-3.5 w-3.5" />
-            Personen-Protokoll
-          </NavLink>
-          <NavLink
-            to="/lagerstaende"
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-all duration-200 ${isActive
-                ? 'bg-sidebar-accent text-sidebar-primary shadow-sm font-medium'
-                : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/40'
-              }`
-            }
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            Lagerstände
-          </NavLink>
-        </div>
-      </div>
-    </div>
-  );
-}
 function UserProfile() {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout } = useAuth();
   if (!user) return null;
 
   const avatar = user.avatar
@@ -266,8 +50,7 @@ function UserProfile() {
 }
 
 function Sidebar({ open, onClose }) {
-  const { isAdmin, isLeadership } = useAuth();
-  const [openMenu, setOpenMenu] = useState(null);
+  const { isAdmin } = useAuth();
 
   return (
     <>
@@ -299,23 +82,28 @@ function Sidebar({ open, onClose }) {
 
         {/* Navigation */}
         <nav className="flex-1 p-4 overflow-y-auto">
-
-          {/* Lager section */}
-          <div className="mt-5 mb-2 px-3">
+          <div className="mt-2 mb-2 px-3">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-              Lager
+              Übersicht
             </p>
           </div>
           <div className="space-y-1">
-            {warehouses
-              .filter(wh => wh.type !== 'leadership' || isLeadership)
-              .map((wh) => (
-                <WarehouseNavItem key={wh.id} warehouse={wh} onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />
-              ))}
+            <NavLink
+              to="/lager"
+              onClick={onClose}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
+                  ? 'bg-sidebar-accent/50 text-sidebar-foreground'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/30'
+                }`
+              }
+            >
+              <Warehouse className="h-4 w-4" />
+              Lager
+            </NavLink>
           </div>
 
-          {/* Buchhaltung section */}
-          {(isAdmin || isLeadership) && (
+          {isAdmin && (
             <>
               <div className="mt-5 mb-2 px-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
@@ -323,8 +111,19 @@ function Sidebar({ open, onClose }) {
                 </p>
               </div>
               <div className="space-y-1">
-                <BuchhaltungNavItem onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />
-                {isAdmin && <AdminNavItem onClose={onClose} openMenu={openMenu} setOpenMenu={setOpenMenu} />}
+                <NavLink
+                  to="/admin"
+                  onClick={onClose}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
+                      ? 'bg-sidebar-accent/50 text-sidebar-foreground'
+                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/30'
+                    }`
+                  }
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  Admin
+                </NavLink>
               </div>
             </>
           )}
@@ -335,34 +134,6 @@ function Sidebar({ open, onClose }) {
       </aside>
     </>
   );
-}
-
-function WarehouseViewWrapper() {
-  const { warehouseId } = useParams();
-  const { isLeadership } = useAuth();
-  if (warehouseId === '1' && !isLeadership) return <Navigate to="/lager/2" replace />;
-  return <WarehouseView warehouseId={warehouseId} />;
-}
-
-function CheckInWrapper() {
-  const { warehouseId } = useParams();
-  const { isLeadership } = useAuth();
-  if (warehouseId === '1' && !isLeadership) return <Navigate to="/lager/2" replace />;
-  return <CheckInForm preselectedWarehouse={warehouseId} />;
-}
-
-function CheckOutWrapper() {
-  const { warehouseId } = useParams();
-  const { isLeadership } = useAuth();
-  if (warehouseId === '1' && !isLeadership) return <Navigate to="/lager/2" replace />;
-  return <CheckOutForm preselectedWarehouse={warehouseId} />;
-}
-
-function AdjustStockWrapper() {
-  const { warehouseId } = useParams();
-  const { isLeadership } = useAuth();
-  if (warehouseId === '1' && !isLeadership) return <Navigate to="/lager/2" replace />;
-  return <AdjustStock preselectedWarehouse={warehouseId} />;
 }
 
 function RequireAuth({ children }) {
@@ -406,15 +177,8 @@ function AppShell() {
 
         <main className="p-6 lg:p-8 max-w-7xl mx-auto">
           <Routes>
-            <Route path="/" element={<Navigate to="/lager/2" replace />} />
-            <Route path="/lager/:warehouseId" element={<WarehouseViewWrapper />} />
-            <Route path="/einlagern/:warehouseId" element={<CheckInWrapper />} />
-            <Route path="/auslagern/:warehouseId" element={<CheckOutWrapper />} />
-            <Route path="/anpassen/:warehouseId" element={<AdjustStockWrapper />} />
-            <Route path="/bestaetigen/:warehouseId" element={<AdjustStockWrapper />} />
-            <Route path="/protokolle" element={<Protocols />} />
-            <Route path="/person" element={<PersonProtocol />} />
-            <Route path="/lagerstaende" element={<StockLevels />} />
+            <Route path="/" element={<Navigate to="/lager" replace />} />
+            <Route path="/lager" element={<WarehouseView />} />
             <Route path="/admin" element={<AdminArea />} />
             <Route path="/admin/logs" element={<AdminArea initialTab="logs" />} />
           </Routes>
