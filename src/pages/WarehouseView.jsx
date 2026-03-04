@@ -106,7 +106,7 @@ function TransactionDialog({ item, warehouseId, user, onClose }) {
                         <div className="grid grid-cols-2 gap-3">
                             <button
                                 onClick={() => setMode('checkin')}
-                                className="group flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-border/50 hover:border-success/50 hover:bg-success/5 transition-all duration-200"
+                                className="group flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-border/50 hover:border-success hover:bg-success/10 transition-colors duration-75"
                             >
                                 <div className="p-3 rounded-full bg-success/10 group-hover:bg-success/20 transition-colors">
                                     <PackagePlus className="h-6 w-6 text-success" />
@@ -115,7 +115,7 @@ function TransactionDialog({ item, warehouseId, user, onClose }) {
                             </button>
                             <button
                                 onClick={() => setMode('checkout')}
-                                className="group flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200"
+                                className="group flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-border/50 hover:border-primary hover:bg-primary/10 transition-colors duration-75"
                             >
                                 <div className="p-3 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
                                     <PackageMinus className="h-6 w-6 text-primary" />
@@ -338,8 +338,8 @@ export default function WarehouseView() {
                                 key={wh.id}
                                 onClick={() => { setActiveWarehouse(wh.id); setIsEditing(false); setEditStatus(null); }}
                                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${isActive
-                                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                                        : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
+                                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                                    : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
                                     }`}
                             >
                                 <WhIcon className="h-4 w-4" />
