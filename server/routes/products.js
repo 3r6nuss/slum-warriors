@@ -51,6 +51,9 @@ router.delete('/:id', (req, res) => {
         db.prepare('DELETE FROM products WHERE id = ?').run(id);
         res.json({ success: true });
     } catch (err) {
+        if (err.message.includes('FOREIGN KEY')) {
+            return res.status(409).json({ error: 'Produkt kann nicht gelöscht werden, da es in Transaktionen oder Bearbeitungen verwendet wird.' });
+        }
         res.status(500).json({ error: err.message });
     }
 });
