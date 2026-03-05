@@ -10,7 +10,8 @@ import { useAuth } from '@/lib/auth';
 import {
     ShieldCheck, Users, ScrollText, Crown, Shield, User, Eye,
     CheckCircle, AlertCircle, Swords, Clock, UserCheck, UserX,
-    Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi
+    Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi,
+    Package, Plus, Trash2
 } from 'lucide-react';
 
 const HARDCODED_IDS = [
@@ -539,8 +540,8 @@ function ServerConsole() {
                                     key={cat}
                                     onClick={() => setFilter(cat)}
                                     className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all ${filter === cat
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
                                         }`}
                                 >
                                     {cat}
@@ -693,8 +694,8 @@ function WsMonitor() {
                                     key={h}
                                     onClick={() => { setHours(h); setLoading(true); }}
                                     className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${hours === h
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
                                         }`}
                                 >
                                     {h}h
@@ -789,6 +790,153 @@ function WsMonitor() {
     );
 }
 
+function ProductManagement() {
+    const [products, setProducts] = useState([]);
+    const [newName, setNewName] = useState('');
+    const [status, setStatus] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [deleting, setDeleting] = useState(null);
+
+    const loadProducts = async () => {
+        try {
+            const res = await fetch('/api/products', { credentials: 'include' });
+            if (res.ok) setProducts(await res.json());
+        } catch (err) {
+            console.error('Failed to load products', err);
+        }
+        setLoading(false);
+    };
+
+    useEffect(() => { loadProducts(); }, []);
+
+    const addProduct = async () => {
+        if (!newName.trim()) return;
+        try {
+            const res = await fetch('/api/products', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ name: newName.trim() }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setStatus({ type: 'success', message: `"${data.name}" wurde hinzugefügt` });
+                setNewName('');
+                loadProducts();
+            } else {
+                setStatus({ type: 'error', message: data.error });
+            }
+        } catch (err) {
+            setStatus({ type: 'error', message: 'Fehler beim Hinzufügen' });
+        }
+    };
+
+    const deleteProduct = async (id, name) => {
+        if (deleting === id) {
+            try {
+                const res = await fetch(`/api/products/${id}`, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                });
+                if (res.ok) {
+                    setStatus({ type: 'success', message: `"${name}" wurde gelöscht` });
+                    loadProducts();
+                } else {
+                    const data = await res.json();
+                    setStatus({ type: 'error', message: data.error });
+                }
+            } catch (err) {
+                setStatus({ type: 'error', message: 'Fehler beim Löschen' });
+            }
+            setDeleting(null);
+        } else {
+            setDeleting(id);
+            setTimeout(() => setDeleting(prev => prev === id ? null : prev), 3000);
+        }
+    };
+
+    return (
+        <Card className="backdrop-blur-sm bg-card/80 border-border/50">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Package className="h-5 w-5 text-primary" />
+                    Produktverwaltung
+                </CardTitle>
+                <CardDescription>{products.length} Produkte registriert</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {status && (
+                    <div className={`mb-4 flex items-center gap-2 p-3 rounded-lg ${status.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                        {status.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+                        <span className="text-sm">{status.message}</span>
+                    </div>
+                )}
+
+                {/* Add new product */}
+                <div className="flex gap-2 mb-6">
+                    <Input
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        placeholder="Neues Produkt hinzufügen..."
+                        className="flex-1"
+                        onKeyDown={(e) => { if (e.key === 'Enter') addProduct(); }}
+                    />
+                    <Button onClick={addProduct} disabled={!newName.trim()} className="gap-1.5">
+                        <Plus className="h-4 w-4" />
+                        Hinzufügen
+                    </Button>
+                </div>
+
+                {/* Product list */}
+                <div className="rounded-md border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>ID</TableHead>
+                                <TableHead>Produktname</TableHead>
+                                <TableHead className="text-right">Aktionen</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {products.map(p => (
+                                <TableRow key={p.id}>
+                                    <TableCell className="font-mono text-xs text-muted-foreground w-16">
+                                        {p.id}
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                        <div className="flex items-center gap-2">
+                                            <Package className="h-4 w-4 text-muted-foreground" />
+                                            {p.name}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button
+                                            size="sm"
+                                            variant={deleting === p.id ? 'destructive' : 'outline'}
+                                            className="gap-1.5"
+                                            onClick={() => deleteProduct(p.id, p.name)}
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                            {deleting === p.id ? 'Wirklich löschen?' : 'Löschen'}
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                            {products.length === 0 && !loading && (
+                                <TableRow>
+                                    <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                                        Noch keine Produkte vorhanden
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function AdminArea({ initialTab = 'roles' }) {
     const { isAdmin } = useAuth();
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -816,12 +964,16 @@ export default function AdminArea({ initialTab = 'roles' }) {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList>
                     <TabsTrigger value="roles">Rollenverwaltung</TabsTrigger>
+                    <TabsTrigger value="products">Produkte</TabsTrigger>
                     <TabsTrigger value="logs">System-Logs</TabsTrigger>
                     <TabsTrigger value="console">Konsole</TabsTrigger>
                     <TabsTrigger value="wsmonitor">WS Monitor</TabsTrigger>
                 </TabsList>
                 <TabsContent value="roles">
                     <RoleManagement />
+                </TabsContent>
+                <TabsContent value="products">
+                    <ProductManagement />
                 </TabsContent>
                 <TabsContent value="logs">
                     <LogPage />
