@@ -91,6 +91,12 @@ if (!userColumns.find(c => c.name === 'display_name')) {
   db.exec(`ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT NULL`);
 }
 
+// Migration: Add 'archived' column to products table if missing
+const productCols = db.prepare("PRAGMA table_info(products)").all();
+if (!productCols.find(c => c.name === 'archived')) {
+  db.exec(`ALTER TABLE products ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`);
+}
+
 // Seed warehouses if not exist
 const warehouseCount = db.prepare('SELECT COUNT(*) as count FROM warehouses').get();
 if (warehouseCount.count === 0) {

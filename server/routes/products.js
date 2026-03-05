@@ -4,7 +4,7 @@ const db = require('../db');
 
 // GET /api/products – list all products
 router.get('/', (req, res) => {
-    const products = db.prepare('SELECT * FROM products ORDER BY name').all();
+    const products = db.prepare('SELECT * FROM products WHERE archived = 0 ORDER BY name').all();
     res.json(products);
 });
 
@@ -52,7 +52,10 @@ router.delete('/:id', (req, res) => {
         res.json({ success: true });
     } catch (err) {
         if (err.message.includes('FOREIGN KEY')) {
-            return res.status(409).json({ error: 'Produkt kann nicht gelöscht werden, da es in Transaktionen oder Bearbeitungen verwendet wird.' });
+            // Soft delete: set archived = 1 and append timestamp to name to free up the unique name
+            const stamp = Date.now();
+            db.prepare('UPDATE products SET archived = 1, name = name || ? WHERE id = ?').run(` (Archiviert ${stamp})`, id);
+            return res.json({ success: true, archived: true });
         }
         res.status(500).json({ error: err.message });
     }
