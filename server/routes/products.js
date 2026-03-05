@@ -10,22 +10,31 @@ router.get('/', (req, res) => {
 
 // POST /api/products – add new product
 router.post('/', (req, res) => {
-    const { name } = req.body;
+    const { name, warehouseIds } = req.body;
     if (!name || !name.trim()) {
         return res.status(400).json({ error: 'Produktname ist erforderlich' });
     }
 
     try {
         const result = db.prepare('INSERT INTO products (name) VALUES (?)').run(name.trim());
+        const productId = result.lastInsertRowid;
 
-        // Initialize inventory for new product in all warehouses
-        const warehouses = db.prepare('SELECT id FROM warehouses').all();
-        const insertInventory = db.prepare('INSERT OR IGNORE INTO inventory (warehouse_id, product_id, quantity) VALUES (?, ?, 0)');
-        for (const wh of warehouses) {
-            insertInventory.run(wh.id, result.lastInsertRowid);
+        // Initialize inventory for new product only in selected warehouses
+        if (warehouseIds && Array.isArray(warehouseIds)) {
+            const insertInventory = db.prepare('INSERT OR IGNORE INTO inventory (warehouse_id, product_id, quantity) VALUES (?, ?, 0)');
+            for (const whId of warehouseIds) {
+                insertInventory.run(whId, productId);
+            }
+        } else {
+            // Fallback: all warehouses if nothing specified (for backwards compatibility if needed)
+            const warehouses = db.prepare('SELECT id FROM warehouses').all();
+            const insertInventory = db.prepare('INSERT OR IGNORE INTO inventory (warehouse_id, product_id, quantity) VALUES (?, ?, 0)');
+            for (const wh of warehouses) {
+                insertInventory.run(wh.id, productId);
+            }
         }
 
-        res.status(201).json({ id: result.lastInsertRowid, name: name.trim() });
+        res.status(201).json({ id: productId, name: name.trim() });
     } catch (err) {
         if (err.message.includes('UNIQUE')) {
             return res.status(409).json({ error: 'Produkt existiert bereits' });

@@ -792,37 +792,64 @@ function WsMonitor() {
 
 function ProductManagement() {
     const [products, setProducts] = useState([]);
+    const [warehouses, setWarehouses] = useState([]);
+    const [selectedWarehouses, setSelectedWarehouses] = useState([]);
     const [newName, setNewName] = useState('');
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState(null);
 
-    const loadProducts = async () => {
+    const loadData = async () => {
         try {
-            const res = await fetch('/api/products', { credentials: 'include' });
-            if (res.ok) setProducts(await res.json());
+            const [prodRes, whRes] = await Promise.all([
+                fetch('/api/products', { credentials: 'include' }),
+                fetch('/api/inventory/warehouses/list', { credentials: 'include' })
+            ]);
+
+            if (prodRes.ok) setProducts(await prodRes.json());
+            if (whRes.ok) {
+                const whData = await whRes.json();
+                setWarehouses(whData);
+                // Default to all warehouses selected
+                setSelectedWarehouses(whData.map(w => w.id));
+            }
         } catch (err) {
-            console.error('Failed to load products', err);
+            console.error('Failed to load data', err);
         }
         setLoading(false);
     };
 
-    useEffect(() => { loadProducts(); }, []);
+    useEffect(() => { loadData(); }, []);
+
+    const toggleWarehouse = (id) => {
+        setSelectedWarehouses(prev =>
+            prev.includes(id) ? prev.filter(wId => wId !== id) : [...prev, id]
+        );
+    };
 
     const addProduct = async () => {
-        if (!newName.trim()) return;
+        if (!newName.trim() || selectedWarehouses.length === 0) {
+            if (selectedWarehouses.length === 0) {
+                setStatus({ type: 'error', message: 'Bitte wähle mindestens ein Lager aus' });
+            }
+            return;
+        }
+
         try {
             const res = await fetch('/api/products', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ name: newName.trim() }),
+                body: JSON.stringify({
+                    name: newName.trim(),
+                    warehouseIds: selectedWarehouses
+                }),
             });
             const data = await res.json();
             if (res.ok) {
                 setStatus({ type: 'success', message: `"${data.name}" wurde hinzugefügt` });
                 setNewName('');
-                loadProducts();
+                loadData(); // Reload to get updated products list
             } else {
                 setStatus({ type: 'error', message: data.error });
             }
@@ -840,7 +867,7 @@ function ProductManagement() {
                 });
                 if (res.ok) {
                     setStatus({ type: 'success', message: `"${name}" wurde gelöscht` });
-                    loadProducts();
+                    loadData();
                 } else {
                     const data = await res.json();
                     setStatus({ type: 'error', message: data.error });
@@ -873,18 +900,34 @@ function ProductManagement() {
                 )}
 
                 {/* Add new product */}
-                <div className="flex gap-2 mb-6">
-                    <Input
-                        value={newName}
-                        onChange={(e) => setNewName(e.target.value)}
-                        placeholder="Neues Produkt hinzufügen..."
-                        className="flex-1"
-                        onKeyDown={(e) => { if (e.key === 'Enter') addProduct(); }}
-                    />
-                    <Button onClick={addProduct} disabled={!newName.trim()} className="gap-1.5">
-                        <Plus className="h-4 w-4" />
-                        Hinzufügen
-                    </Button>
+                <div className="flex flex-col gap-3 mb-6 bg-muted/30 p-4 rounded-xl border">
+                    <div className="flex flex-wrap gap-2">
+                        {warehouses.map(w => (
+                            <Button
+                                key={w.id}
+                                size="sm"
+                                variant={selectedWarehouses.includes(w.id) ? 'default' : 'outline'}
+                                onClick={() => toggleWarehouse(w.id)}
+                                className={`text-xs h-8 ${selectedWarehouses.includes(w.id) ? 'bg-primary/20 text-primary hover:bg-primary/30' : ''}`}
+                            >
+                                {selectedWarehouses.includes(w.id) ? <Check className="h-3.5 w-3.5 mr-1" /> : null}
+                                {w.name}
+                            </Button>
+                        ))}
+                    </div>
+                    <div className="flex gap-2">
+                        <Input
+                            value={newName}
+                            onChange={(e) => setNewName(e.target.value)}
+                            placeholder="Neues Produkt hinzufügen..."
+                            className="flex-1 bg-background"
+                            onKeyDown={(e) => { if (e.key === 'Enter') addProduct(); }}
+                        />
+                        <Button onClick={addProduct} disabled={!newName.trim() || selectedWarehouses.length === 0} className="gap-1.5 min-w-[120px]">
+                            <Plus className="h-4 w-4" />
+                            Hinzufügen
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Product list */}
