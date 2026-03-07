@@ -11,7 +11,7 @@ import {
     ShieldCheck, Users, ScrollText, Crown, Shield, User, Eye,
     CheckCircle, AlertCircle, Swords, Clock, UserCheck, UserX,
     Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi,
-    Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Send
+    Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Send, Loader2
 } from 'lucide-react';
 
 const HARDCODED_IDS = [
