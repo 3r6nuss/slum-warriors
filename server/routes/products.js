@@ -63,6 +63,47 @@ router.put('/:id', (req, res) => {
     }
 });
 
+// PUT /api/products/:id/warehouses - update warehouse assignments
+router.put('/:id/warehouses', (req, res) => {
+    const { id } = req.params;
+    const { warehouseIds } = req.body;
+
+    if (!Array.isArray(warehouseIds)) {
+        return res.status(400).json({ error: 'warehouseIds must be an array' });
+    }
+
+    try {
+        const transaction = db.transaction(() => {
+            // Get current assignments
+            const currentInventory = db.prepare('SELECT warehouse_id FROM inventory WHERE product_id = ?').all(id);
+            const currentIds = currentInventory.map(i => i.warehouse_id);
+
+            // Determine what to add and what to remove
+            const toAdd = warehouseIds.filter(wid => !currentIds.includes(wid));
+            const toRemove = currentIds.filter(wid => !warehouseIds.includes(wid));
+
+            // Remove unselected warehouses
+            if (toRemove.length > 0) {
+                const placeholders = toRemove.map(() => '?').join(',');
+                db.prepare(`DELETE FROM inventory WHERE product_id = ? AND warehouse_id IN (${placeholders})`).run(id, ...toRemove);
+            }
+
+            // Add new warehouses
+            if (toAdd.length > 0) {
+                const insertInv = db.prepare('INSERT INTO inventory (warehouse_id, product_id, quantity) VALUES (?, ?, 0)');
+                for (const wid of toAdd) {
+                    insertInv.run(wid, id);
+                }
+            }
+        });
+
+        transaction();
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // PUT /api/products/reorder - batch update sort_order
 router.put('/reorder', (req, res) => {
     const { order } = req.body; // array of { id, sort_order }

@@ -5,14 +5,14 @@ const { getFullInventory } = require('../websocket');
 
 // GET /api/inventory – full inventory
 router.get('/', (req, res) => {
-    const inventory = getFullInventory();
-    res.json(inventory);
+  const inventory = getFullInventory();
+  res.json(inventory);
 });
 
 // GET /api/inventory/:warehouseId – per warehouse
 router.get('/:warehouseId', (req, res) => {
-    const { warehouseId } = req.params;
-    const inventory = db.prepare(`
+  const { warehouseId } = req.params;
+  const inventory = db.prepare(`
     SELECT 
       i.id,
       i.warehouse_id,
@@ -25,15 +25,15 @@ router.get('/:warehouseId', (req, res) => {
     JOIN warehouses w ON i.warehouse_id = w.id
     JOIN products p ON i.product_id = p.id
     WHERE i.warehouse_id = ?
-    ORDER BY p.name
+    ORDER BY p.sort_order ASC, p.name ASC
   `).all(warehouseId);
-    res.json(inventory);
+  res.json(inventory);
 });
 
 // GET /api/warehouses – list warehouses
 router.get('/warehouses/list', (req, res) => {
-    const warehouses = db.prepare('SELECT * FROM warehouses').all();
-    res.json(warehouses);
+  const warehouses = db.prepare('SELECT * FROM warehouses').all();
+  res.json(warehouses);
 });
 
 module.exports = router;

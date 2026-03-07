@@ -888,14 +888,35 @@ function ProductManagement() {
 
     const loadData = async () => {
         try {
-            const [prodRes, whRes] = await Promise.all([
+            const [prodRes, whRes, invRes] = await Promise.all([
                 fetch('/api/products', { credentials: 'include' }),
-                fetch('/api/inventory/warehouses/list', { credentials: 'include' })
+                fetch('/api/inventory/warehouses/list', { credentials: 'include' }),
+                fetch('/api/inventory', { credentials: 'include' })
             ]);
 
-            if (prodRes.ok) setProducts(await prodRes.json());
-            if (whRes.ok) {
+            if (prodRes.ok && whRes.ok && invRes.ok) {
+                const prodData = await prodRes.json();
                 const whData = await whRes.json();
+                const invData = await invRes.json();
+
+                // Map product ID to assigned warehouse IDs
+                const assignments = {};
+                prodData.forEach(p => { assignments[p.id] = []; });
+                invData.forEach(i => {
+                    if (assignments[i.product_id]) {
+                        if (!assignments[i.product_id].includes(i.warehouse_id)) {
+                            assignments[i.product_id].push(i.warehouse_id);
+                        }
+                    }
+                });
+
+                // Attach warehouseIds to products for the UI
+                const productsWithWarehouses = prodData.map(p => ({
+                    ...p,
+                    warehouseIds: assignments[p.id] || []
+                }));
+
+                setProducts(productsWithWarehouses);
                 setWarehouses(whData);
                 // Default to all warehouses selected
                 setSelectedWarehouses(whData.map(w => w.id));
@@ -1028,6 +1049,38 @@ function ProductManagement() {
         }
     };
 
+    const toggleProductWarehouse = async (productId, warehouseId, currentWarehouseIds) => {
+        const newWarehouseIds = currentWarehouseIds.includes(warehouseId)
+            ? currentWarehouseIds.filter(id => id !== warehouseId)
+            : [...currentWarehouseIds, warehouseId];
+
+        // Prevent removing a product from ALL warehouses (must be in at least one)
+        if (newWarehouseIds.length === 0) {
+            setStatus({ type: 'error', message: 'Ein Produkt muss mindestens einem Lager zugewiesen sein.' });
+            return;
+        }
+
+        // Optimistic UI update
+        setProducts(products.map(p => p.id === productId ? { ...p, warehouseIds: newWarehouseIds } : p));
+
+        try {
+            const res = await fetch(`/api/products/${productId}/warehouses`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ warehouseIds: newWarehouseIds })
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Fehler beim Speichern');
+            }
+        } catch (err) {
+            setStatus({ type: 'error', message: err.message });
+            loadData(); // Revert on failure
+        }
+    };
+
     return (
         <Card className="backdrop-blur-sm bg-card/80 border-border/50">
             <CardHeader>
@@ -1084,6 +1137,7 @@ function ProductManagement() {
                                 <TableHead className="w-24">Sortierung</TableHead>
                                 <TableHead>ID</TableHead>
                                 <TableHead>Produktname</TableHead>
+                                <TableHead>Lager-Zuweisung</TableHead>
                                 <TableHead className="text-right">Aktionen</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -1150,6 +1204,23 @@ function ProductManagement() {
                                             </div>
                                         )}
                                     </TableCell>
+                                    <TableCell>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {warehouses.map(w => {
+                                                const isAssigned = p.warehouseIds?.includes(w.id);
+                                                return (
+                                                    <Badge
+                                                        key={w.id}
+                                                        variant={isAssigned ? (w.type === 'leadership' ? 'warning' : 'default') : 'outline'}
+                                                        className={`text-[10px] cursor-pointer transition-colors ${!isAssigned && 'text-muted-foreground hover:bg-muted opacity-50'}`}
+                                                        onClick={() => toggleProductWarehouse(p.id, w.id, p.warehouseIds || [])}
+                                                    >
+                                                        {w.name}
+                                                    </Badge>
+                                                )
+                                            })}
+                                        </div>
+                                    </TableCell>
                                     <TableCell className="text-right">
                                         <Button
                                             size="sm"
@@ -1165,7 +1236,7 @@ function ProductManagement() {
                             ))}
                             {products.length === 0 && !loading && (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                                         Noch keine Produkte vorhanden
                                     </TableCell>
                                 </TableRow>
