@@ -5,9 +5,11 @@ const http = require('http');
 const session = require('express-session');
 const { initWebSocket } = require('./websocket');
 const { log, requestLoggerMiddleware } = require('./logger');
+const { startStatsJob } = require('./jobs/weeklyStats');
 
 // Initialize DB (runs schema + seed)
-require('./db');
+const db = require('./db');
+const { sendSystemAlert } = require('./lib/discord');
 
 const app = express();
 const server = http.createServer(app);
@@ -65,12 +67,60 @@ if (isProduction) {
     });
 }
 
+// Global API Error Handler
+app.use((err, req, res, next) => {
+    log('ERROR', `Express Error: ${err.message}`);
+    try {
+        const stmt = db.prepare('INSERT INTO error_logs (level, message, stack, context) VALUES (?, ?, ?, ?)');
+        stmt.run('error', err.message, err.stack, `Route: ${req.method} ${req.originalUrl}`);
+
+        sendSystemAlert(
+            '⚠️ API Error',
+            `**Route:** ${req.method} ${req.originalUrl}\n**Message:** ${err.message}\n\`\`\`\n${err.stack?.slice(0, 1000)}\n\`\`\``,
+            0xe74c3c
+        );
+    } catch (dbErr) {
+        console.error('Failed to log error to DB:', dbErr);
+    }
+
+    if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 // Initialize WebSocket
 initWebSocket(server);
+
+// Start Background Jobs
+startStatsJob();
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
     log('SERVER', `Slum Warriors Lagerverwaltung API läuft auf Port ${PORT}`);
     log('SERVER', `Mode: ${isProduction ? 'Production' : 'Development'}`);
     log('SERVER', `WebSocket verfügbar auf ws://0.0.0.0:${PORT}`);
+});
+
+// Uncaught Exceptions and Promise Rejections
+process.on('uncaughtException', (err) => {
+    log('FATAL', `Uncaught Exception: ${err.message}`);
+    try {
+        db.prepare('INSERT INTO error_logs (level, message, stack, context) VALUES (?, ?, ?, ?)').run('fatal', err.message, err.stack, 'uncaughtException');
+        sendSystemAlert('💥 Fatal Crash', `**Uncaught Exception:** ${err.message}\n\`\`\`\n${err.stack?.slice(0, 1000)}\n\`\`\``, 0x992d22);
+    } catch (e) {
+        console.error('Fallback logging failed', e);
+    }
+    setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    log('ERROR', `Unhandled Rejection: ${reason}`);
+    try {
+        const msg = reason instanceof Error ? reason.message : String(reason);
+        const stack = reason instanceof Error ? reason.stack : '';
+        db.prepare('INSERT INTO error_logs (level, message, stack, context) VALUES (?, ?, ?, ?)').run('error', msg, stack, 'unhandledRejection');
+        sendSystemAlert('⚠️ Unhandled Promise', `**Rejection:** ${msg}\n\`\`\`\n${stack?.slice(0, 1000)}\n\`\`\``, 0xe67e22);
+    } catch (e) {
+        console.error('Fallback logging failed', e);
+    }
 });

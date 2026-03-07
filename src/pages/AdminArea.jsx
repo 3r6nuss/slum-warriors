@@ -295,18 +295,24 @@ function RoleManagement() {
 function LogPage() {
     const [transactions, setTransactions] = useState([]);
     const [edits, setEdits] = useState([]);
+    const [adminLogs, setAdminLogs] = useState([]);
+    const [authLogs, setAuthLogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedEdit, setExpandedEdit] = useState(null);
 
     const loadLogs = async () => {
         setLoading(true);
         try {
-            const [txRes, editRes] = await Promise.all([
+            const [txRes, editRes, adminRes, authRes] = await Promise.all([
                 fetch('/api/transactions'),
-                fetch('/api/adjustments/edits')
+                fetch('/api/adjustments/edits'),
+                fetch('/api/admin/audit/admin', { credentials: 'include' }),
+                fetch('/api/admin/audit/auth', { credentials: 'include' })
             ]);
             if (txRes.ok) setTransactions(await txRes.json());
             if (editRes.ok) setEdits(await editRes.json());
+            if (adminRes.ok) setAdminLogs(await adminRes.json());
+            if (authRes.ok) setAuthLogs(await authRes.json());
         } catch (err) {
             console.error('Failed to load logs', err);
         }
@@ -380,9 +386,11 @@ function LogPage() {
             </CardHeader>
             <CardContent>
                 <Tabs defaultValue="transactions" className="w-full">
-                    <TabsList className="mb-4">
-                        <TabsTrigger value="transactions">Transaktionen (Ein-/Auslagern)</TabsTrigger>
+                    <TabsList className="mb-4 flex-wrap">
+                        <TabsTrigger value="transactions">Transaktionen</TabsTrigger>
                         <TabsTrigger value="edits">Lager-Bearbeitungen</TabsTrigger>
+                        <TabsTrigger value="admin">Admin-Aktionen</TabsTrigger>
+                        <TabsTrigger value="auth">Authentifizierung</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="transactions">
@@ -465,6 +473,84 @@ function LogPage() {
                                     </div>
                                 ))
                             )}
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="admin">
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Datum</TableHead>
+                                        <TableHead>Admin</TableHead>
+                                        <TableHead>Aktion</TableHead>
+                                        <TableHead>Ziel-Benutzer</TableHead>
+                                        <TableHead>Details</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {adminLogs.map(l => (
+                                        <TableRow key={l.id}>
+                                            <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                                                {new Date(l.created_at).toLocaleString('de-DE')}
+                                            </TableCell>
+                                            <TableCell className="font-medium">{l.admin_name}</TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline" className="text-[10px] uppercase">
+                                                    {l.action.replace('_', ' ')}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>{l.target_name || '-'}</TableCell>
+                                            <TableCell className="text-muted-foreground text-sm">{l.details}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {adminLogs.length === 0 && !loading && (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                Keine Admin-Aktivitäten gefunden.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="auth">
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Datum</TableHead>
+                                        <TableHead>Benutzer</TableHead>
+                                        <TableHead>Aktion</TableHead>
+                                        <TableHead>IP / Info</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {authLogs.map(l => (
+                                        <TableRow key={l.id}>
+                                            <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                                                {new Date(l.created_at).toLocaleString('de-DE')}
+                                            </TableCell>
+                                            <TableCell className="font-medium">{l.username}</TableCell>
+                                            <TableCell>
+                                                <Badge variant={l.action === 'login' ? 'success' : l.action === 'register' ? 'primary' : 'secondary'} className="text-[10px] uppercase">
+                                                    {l.action}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground font-mono text-xs">{l.ip_address || '-'}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {authLogs.length === 0 && !loading && (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                                                Keine Authentifizierungs-Logs gefunden.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
                         </div>
                     </TabsContent>
                 </Tabs>

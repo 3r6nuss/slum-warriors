@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { broadcastInventory } = require('../websocket');
+const { sendSystemAlert } = require('../lib/discord');
 
 // POST /api/transactions – create check-in or check-out
 router.post('/', (req, res) => {
@@ -49,6 +50,33 @@ router.post('/', (req, res) => {
 
         const result = txn();
         broadcastInventory();
+
+        // --- Logging / Alerts ---
+        try {
+            const product = db.prepare('SELECT name FROM products WHERE id = ?').get(product_id);
+            const wh = db.prepare('SELECT name FROM warehouses WHERE id = ?').get(warehouse_id);
+            const newStock = db.prepare('SELECT quantity FROM inventory WHERE warehouse_id = ? AND product_id = ?').get(warehouse_id, product_id);
+
+            // Alert on large quantity
+            if (quantity >= 50) {
+                sendSystemAlert(
+                    '⚠️ Große Transaktion',
+                    `**${person_name}** hat eine ungewöhnlich große Menge bewegt:\n**Menge:** ${quantity}x ${product?.name}\n**Aktion:** ${type === 'checkin' ? 'Einlagern' : 'Auslagern'}\n**Lager:** ${wh?.name}`,
+                    0xe67e22 // Orange
+                );
+            }
+
+            // Alert on low stock (only on checkout)
+            if (type === 'checkout' && newStock && newStock.quantity < 5) {
+                sendSystemAlert(
+                    '📉 Niedriger Bestand',
+                    `Der Bestand von **${product?.name}** im **${wh?.name}** ist kritisch niedrig!\n**Aktueller Bestand:** ${newStock.quantity} Stück`,
+                    0xe74c3c // Red
+                );
+            }
+        } catch (alertErr) {
+            console.error('Failed to send transaction alert:', alertErr);
+        }
 
         res.status(201).json({
             id: result.lastInsertRowid,

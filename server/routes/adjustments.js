@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { broadcastInventory } = require('../websocket');
+const { sendSystemAlert } = require('../lib/discord');
 
 // POST /api/adjustments/batch - bulk inventory update logging entire warehouse state
 router.post('/batch', (req, res) => {
@@ -80,6 +81,18 @@ router.post('/batch', (req, res) => {
 
         if (updatedCount > 0) {
             broadcastInventory();
+
+            // --- Discord Alert ---
+            try {
+                const wh = db.prepare('SELECT name FROM warehouses WHERE id = ?').get(warehouse_id);
+                sendSystemAlert(
+                    '📝 Lagerbestand manuell bearbeitet',
+                    `**${person_name}** hat **${updatedCount}** Produkte im **${wh?.name}** manuell verändert.\n**Grund:** ${reason || 'Kein Grund angegeben'}\n\nEine genaue Liste der Änderungen ist im Admin-Bereich einsehbar.`,
+                    0x3498db // Blue
+                );
+            } catch (alertErr) {
+                console.error('Failed to send batch edit alert:', alertErr);
+            }
         }
 
         res.status(201).json({ message: `${updatedCount} Produkte aktualisiert.` });
@@ -160,6 +173,21 @@ router.post('/', (req, res) => {
 
         const result = txn();
         broadcastInventory();
+
+        // --- Discord Alert ---
+        try {
+            if (Math.abs(result.difference) >= 50) {
+                const product = db.prepare('SELECT name FROM products WHERE id = ?').get(product_id);
+                const wh = db.prepare('SELECT name FROM warehouses WHERE id = ?').get(warehouse_id);
+                sendSystemAlert(
+                    '⚠️ Große Bestandsanpassung',
+                    `**${person_name}** hat den Bestand von **${product?.name}** im **${wh?.name}** drastisch geändert:\n**Von:** ${result.oldQuantity} **Auf:** ${new_quantity} (Differenz: ${result.difference > 0 ? '+' : ''}${result.difference})\n**Grund:** ${reason || 'Keine Angabe'}`,
+                    0xe67e22 // Orange
+                );
+            }
+        } catch (alertErr) {
+            console.error('Failed to send adjustment alert:', alertErr);
+        }
 
         res.status(201).json({
             message: 'Bestand angepasst',

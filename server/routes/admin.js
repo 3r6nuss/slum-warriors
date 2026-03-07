@@ -37,4 +37,24 @@ router.get('/ws-stats', requireAdmin, (req, res) => {
     }
 });
 
+// GET /api/admin/audit/admin – return admin action logs
+router.get('/audit/admin', requireAdmin, (req, res) => {
+    try {
+        const logs = db.prepare('SELECT * FROM admin_logs ORDER BY created_at DESC LIMIT 200').all();
+        res.json(logs);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/admin/audit/auth – return authentication logs
+router.get('/audit/auth', requireAdmin, (req, res) => {
+    try {
+        const logs = db.prepare('SELECT * FROM auth_logs ORDER BY created_at DESC LIMIT 200').all();
+        res.json(logs);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

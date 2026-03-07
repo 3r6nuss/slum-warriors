@@ -76,6 +76,35 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
   );
+
+  CREATE TABLE IF NOT EXISTS admin_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id INTEGER,
+    admin_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target_id INTEGER,
+    target_name TEXT,
+    details TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+
+  CREATE TABLE IF NOT EXISTS auth_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    username TEXT NOT NULL,
+    action TEXT NOT NULL CHECK(action IN ('login', 'logout', 'register')),
+    ip_address TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+
+  CREATE TABLE IF NOT EXISTS error_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    level TEXT NOT NULL DEFAULT 'error',
+    message TEXT NOT NULL,
+    stack TEXT,
+    context TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
 `);
 
 // Migration: Add 'approved' column to users table if missing

@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const https = require('https');
 const querystring = require('querystring');
+const { sendSystemAlert } = require('../lib/discord');
 
 // Discord OAuth2 Config
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1477714942647079074';
@@ -91,13 +92,29 @@ router.post('/callback', async (req, res) => {
             db.prepare(
                 `UPDATE users SET username = ?, avatar = ?, updated_at = datetime('now','localtime') WHERE discord_id = ?`
             ).run(userInfo.username, userInfo.avatar, userInfo.id);
+
+            // Log login
+            db.prepare('INSERT INTO auth_logs (user_id, username, action, ip_address) VALUES (?, ?, ?, ?)').run(existingUser.id, userInfo.username, 'login', req.ip);
         } else {
             // New user: admin gets auto-approved, everyone else is pending
             const defaultRole = isAdmin ? 'admin' : 'pending';
             const defaultApproved = isAdmin ? 1 : 0;
-            db.prepare(
+            const res = db.prepare(
                 'INSERT INTO users (discord_id, username, avatar, role, approved) VALUES (?, ?, ?, ?, ?)'
             ).run(userInfo.id, userInfo.username, userInfo.avatar, defaultRole, defaultApproved);
+
+            // Log registration and initial login
+            db.prepare('INSERT INTO auth_logs (user_id, username, action, ip_address) VALUES (?, ?, ?, ?)').run(res.lastInsertRowid, userInfo.username, 'register', req.ip);
+            db.prepare('INSERT INTO auth_logs (user_id, username, action, ip_address) VALUES (?, ?, ?, ?)').run(res.lastInsertRowid, userInfo.username, 'login', req.ip);
+
+            // Discord Alert
+            if (!isAdmin) {
+                sendSystemAlert(
+                    '👤 Neuer Benutzer Registriert',
+                    `**${userInfo.username}** hat sich angemeldet.\nBitte im Admin-Bereich die Rolle zuweisen und den Benutzer freischalten.`,
+                    0x2ecc71
+                );
+            }
         }
 
         // Get the full user record
@@ -151,6 +168,9 @@ router.get('/me', (req, res) => {
 
 // POST /api/auth/logout – clear session
 router.post('/logout', (req, res) => {
+    if (req.session.user) {
+        db.prepare('INSERT INTO auth_logs (user_id, username, action, ip_address) VALUES (?, ?, ?, ?)').run(req.session.user.id, req.session.user.username, 'logout', req.ip);
+    }
     req.session.destroy();
     res.json({ success: true });
 });
@@ -191,6 +211,19 @@ router.put('/users/:id/role', requireAdmin, (req, res) => {
     }
 
     db.prepare(`UPDATE users SET role = ?, updated_at = datetime('now','localtime') WHERE id = ?`).run(role, id);
+
+    // Log Admin Action
+    const adminUser = req.session.user;
+    db.prepare('INSERT INTO admin_logs (admin_id, admin_name, action, target_id, target_name, details) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(adminUser.id, adminUser.username, 'change_role', user.id, user.username, `Role changed from ${user.role} to ${role}`);
+
+    // Discord Alert
+    sendSystemAlert(
+        '🛡️ Rolle geändert',
+        `Admin **${adminUser.username}** hat die Rolle von **${user.username}** auf **${role}** geändert.`,
+        0xf1c40f
+    );
+
     res.json({ success: true, message: `Rolle auf "${role}" geändert` });
 });
 
@@ -210,6 +243,19 @@ router.put('/users/:id/approve', requireAdmin, (req, res) => {
     }
 
     db.prepare(`UPDATE users SET role = ?, approved = 1, updated_at = datetime('now','localtime') WHERE id = ?`).run(targetRole, id);
+
+    // Log Admin Action
+    const adminUser = req.session.user;
+    db.prepare('INSERT INTO admin_logs (admin_id, admin_name, action, target_id, target_name, details) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(adminUser.id, adminUser.username, 'approve_user', user.id, user.username, `Approved with role: ${targetRole}`);
+
+    // Discord Alert
+    sendSystemAlert(
+        '✅ Benutzer freigeschaltet',
+        `Admin **${adminUser.username}** hat den Benutzer **${user.username}** freigeschaltet (Rolle: **${targetRole}**).`,
+        0x2ecc71
+    );
+
     res.json({ success: true, message: `Benutzer freigeschaltet mit Rolle "${targetRole}"` });
 });
 
@@ -228,6 +274,19 @@ router.put('/users/:id/revoke', requireAdmin, (req, res) => {
     }
 
     db.prepare(`UPDATE users SET role = 'pending', approved = 0, updated_at = datetime('now','localtime') WHERE id = ?`).run(id);
+
+    // Log Admin Action
+    const adminUser = req.session.user;
+    db.prepare('INSERT INTO admin_logs (admin_id, admin_name, action, target_id, target_name, details) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(adminUser.id, adminUser.username, 'revoke_user', user.id, user.username, `Revoked approval. Back to pending.`);
+
+    // Discord Alert
+    sendSystemAlert(
+        '🛑 Benutzer gesperrt / zurückgesetzt',
+        `Admin **${adminUser.username}** hat die Freischaltung für den Benutzer **${user.username}** zurückgezogen.`,
+        0xe74c3c
+    );
+
     res.json({ success: true, message: `Freischaltung für "${user.username}" wurde zurückgesetzt` });
 });
 
@@ -243,6 +302,11 @@ router.put('/users/:id/display-name', requireAdmin, (req, res) => {
 
     const trimmedName = display_name ? display_name.trim() : null;
     db.prepare(`UPDATE users SET display_name = ?, updated_at = datetime('now','localtime') WHERE id = ?`).run(trimmedName, id);
+
+    const adminUser = req.session.user;
+    db.prepare('INSERT INTO admin_logs (admin_id, admin_name, action, target_id, target_name, details) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(adminUser.id, adminUser.username, 'set_display_name', user.id, user.username, `Changed display name from ${user.display_name} to ${trimmedName}`);
+
     res.json({ success: true, message: `Klarname auf "${trimmedName || '(entfernt)'}" gesetzt` });
 });
 
