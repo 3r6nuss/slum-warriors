@@ -218,6 +218,8 @@ export default function WarehouseView() {
     const [isSaving, setIsSaving] = useState(false);
     const [editStatus, setEditStatus] = useState(null);
 
+    const [quickStatus, setQuickStatus] = useState(null);
+
     const warehouseId = activeWarehouse;
 
     const warehouseItems = useMemo(() => {
@@ -245,6 +247,46 @@ export default function WarehouseView() {
             setEditStatus(null);
         }
         setIsEditing(!isEditing);
+    };
+
+    const handleQuickTransaction = async (e, item, amount) => {
+        if (e) e.stopPropagation();
+        if (amount === 0 || isNaN(amount)) return;
+
+        const qty = Math.abs(amount);
+        const type = amount > 0 ? 'checkin' : 'checkout';
+
+        if (type === 'checkout' && qty > item.quantity) {
+            setQuickStatus({ type: 'error', message: `Nicht genügend Bestand für ${item.product_name}.` });
+            setTimeout(() => setQuickStatus(null), 3000);
+            return;
+        }
+
+        const pName = user?.display_name || user?.username || 'Unbekannt';
+
+        try {
+            const res = await fetch('/api/transactions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    warehouse_id: parseInt(warehouseId),
+                    product_id: item.product_id,
+                    person_name: pName,
+                    type: type,
+                    quantity: qty,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setQuickStatus({ type: 'error', message: data.error || 'Fehler beim Buchen.' });
+            } else {
+                setQuickStatus({ type: 'success', message: `${qty}x ${item.product_name} ${type === 'checkin' ? 'eingelagert' : 'ausgelagert'}!` });
+            }
+        } catch {
+            setQuickStatus({ type: 'error', message: 'Verbindungsfehler' });
+        }
+
+        setTimeout(() => setQuickStatus(null), 3000);
     };
 
     const handleSave = async () => {
@@ -363,6 +405,11 @@ export default function WarehouseView() {
                                 {editStatus.message}
                             </p>
                         )}
+                        {quickStatus && !isEditing && (
+                            <p className={`text-sm mt-1 font-medium ${quickStatus.type === 'error' ? 'text-destructive' : 'text-success'}`}>
+                                {quickStatus.message}
+                            </p>
+                        )}
                     </div>
                     {(isAdmin || isLeadership) && (
                         <div className="flex gap-2 relative top-2">
@@ -415,6 +462,52 @@ export default function WarehouseView() {
                                         {item.product_name}
                                     </h3>
                                 </div>
+
+                                {!isEditing && (
+                                    <div
+                                        className="mt-3 pt-3 border-t border-border/20 flex items-center justify-between gap-1.5"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8 w-9 p-0 shrink-0 text-primary border-primary/20 hover:bg-primary/10 hover:text-primary transition-colors"
+                                            onClick={(e) => handleQuickTransaction(e, item, -1)}
+                                            disabled={item.quantity <= 0}
+                                            title="1 Auslagern"
+                                        >
+                                            -1
+                                        </Button>
+
+                                        <div className="flex-1 relative">
+                                            <Input
+                                                className="h-8 text-center text-xs px-1 bg-secondary/30 focus:bg-background transition-colors"
+                                                placeholder="± Zahl ↵"
+                                                title="Zahl eingeben und Enter drücken (+ für Einlagern, - für Auslagern)"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        const val = parseInt(e.currentTarget.value);
+                                                        if (!isNaN(val) && val !== 0) {
+                                                            handleQuickTransaction(e, item, val);
+                                                            e.currentTarget.value = '';
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8 w-9 p-0 shrink-0 text-success border-success/20 hover:bg-success/10 hover:text-success transition-colors"
+                                            onClick={(e) => handleQuickTransaction(e, item, 1)}
+                                            title="1 Einlagern"
+                                        >
+                                            +1
+                                        </Button>
+                                    </div>
+                                )}
 
                                 {isEditing && (
                                     <div className="mt-3 pt-3 border-t border-border/50">
