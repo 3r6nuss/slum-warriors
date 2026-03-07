@@ -60,7 +60,7 @@ function getFullInventory() {
     FROM inventory i
     JOIN warehouses w ON i.warehouse_id = w.id
     JOIN products p ON i.product_id = p.id
-    ORDER BY w.id, p.name
+    ORDER BY w.id, p.sort_order ASC, p.name ASC
   `).all();
 }
 

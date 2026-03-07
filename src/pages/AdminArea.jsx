@@ -11,7 +11,7 @@ import {
     ShieldCheck, Users, ScrollText, Crown, Shield, User, Eye,
     CheckCircle, AlertCircle, Swords, Clock, UserCheck, UserX,
     Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi,
-    Package, Plus, Trash2
+    Package, Plus, Trash2, ArrowUp, ArrowDown
 } from 'lucide-react';
 
 const HARDCODED_IDS = [
@@ -884,6 +884,7 @@ function ProductManagement() {
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState(null);
+    const [editingProduct, setEditingProduct] = useState(null); // { id, name }
 
     const loadData = async () => {
         try {
@@ -968,6 +969,65 @@ function ProductManagement() {
         }
     };
 
+    const renameProduct = async (id, currentName) => {
+        if (!editingProduct.name.trim() || editingProduct.name === currentName) {
+            setEditingProduct(null);
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/products/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ name: editingProduct.name.trim() })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                setStatus({ type: 'success', message: `Produkt umbenannt in "${data.name}"` });
+                setEditingProduct(null);
+                loadData();
+            } else {
+                setStatus({ type: 'error', message: data.error });
+            }
+        } catch (err) {
+            setStatus({ type: 'error', message: 'Fehler beim Umbenennen' });
+        }
+    };
+
+    const moveProduct = async (index, direction) => {
+        if (
+            (direction === -1 && index === 0) ||
+            (direction === 1 && index === products.length - 1)
+        ) return;
+
+        const newProducts = [...products];
+        // Swap items
+        const temp = newProducts[index];
+        newProducts[index] = newProducts[index + direction];
+        newProducts[index + direction] = temp;
+
+        // Setup new order payload
+        const orderPayload = newProducts.map((p, i) => ({ id: p.id, sort_order: i }));
+
+        // Optimistic UI update
+        setProducts(newProducts);
+
+        try {
+            const res = await fetch('/api/products/reorder', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ order: orderPayload })
+            });
+            if (!res.ok) throw new Error('Failed to save order');
+        } catch (err) {
+            setStatus({ type: 'error', message: 'Fehler beim Speichern der Sortierung' });
+            loadData(); // Revert on failure
+        }
+    };
+
     return (
         <Card className="backdrop-blur-sm bg-card/80 border-border/50">
             <CardHeader>
@@ -1021,22 +1081,74 @@ function ProductManagement() {
                     <Table>
                         <TableHeader>
                             <TableRow>
+                                <TableHead className="w-24">Sortierung</TableHead>
                                 <TableHead>ID</TableHead>
                                 <TableHead>Produktname</TableHead>
                                 <TableHead className="text-right">Aktionen</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {products.map(p => (
+                            {products.map((p, index) => (
                                 <TableRow key={p.id}>
+                                    <TableCell>
+                                        <div className="flex gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6"
+                                                disabled={index === 0}
+                                                onClick={() => moveProduct(index, -1)}
+                                            >
+                                                <ArrowUp className="h-4 w-4" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-6 w-6"
+                                                disabled={index === products.length - 1}
+                                                onClick={() => moveProduct(index, 1)}
+                                            >
+                                                <ArrowDown className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </TableCell>
                                     <TableCell className="font-mono text-xs text-muted-foreground w-16">
                                         {p.id}
                                     </TableCell>
                                     <TableCell className="font-medium">
-                                        <div className="flex items-center gap-2">
-                                            <Package className="h-4 w-4 text-muted-foreground" />
-                                            {p.name}
-                                        </div>
+                                        {editingProduct?.id === p.id ? (
+                                            <div className="flex items-center gap-1.5">
+                                                <Input
+                                                    value={editingProduct.name}
+                                                    onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                                                    className="h-8 w-48 text-sm"
+                                                    autoFocus
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') renameProduct(p.id, p.name);
+                                                        if (e.key === 'Escape') setEditingProduct(null);
+                                                    }}
+                                                />
+                                                <Button size="icon" variant="ghost" className="h-7 w-7 text-green-500" onClick={() => renameProduct(p.id, p.name)}>
+                                                    <Check className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => setEditingProduct(null)}>
+                                                    <X className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-2 group">
+                                                <Package className="h-4 w-4 text-muted-foreground" />
+                                                {p.name}
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    onClick={() => setEditingProduct({ id: p.id, name: p.name })}
+                                                >
+                                                    <Pencil className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <Button
@@ -1053,7 +1165,7 @@ function ProductManagement() {
                             ))}
                             {products.length === 0 && !loading && (
                                 <TableRow>
-                                    <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                                         Noch keine Produkte vorhanden
                                     </TableCell>
                                 </TableRow>
