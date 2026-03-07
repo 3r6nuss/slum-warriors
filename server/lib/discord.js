@@ -9,6 +9,11 @@ async function sendDiscordAlert(payload) {
     if (!webhookUrl) return;
 
     try {
+        const setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('webhook_enabled');
+        if (setting && setting.value === 'false') {
+            return; // Webhook disabled globally
+        }
+
         const response = await fetch(webhookUrl, {
             method: 'POST',
             headers: {

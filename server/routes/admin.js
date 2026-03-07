@@ -57,4 +57,46 @@ router.get('/audit/auth', requireAdmin, (req, res) => {
     }
 });
 
+// GET /api/admin/settings - get all global settings
+router.get('/settings', requireAdmin, (req, res) => {
+    try {
+        const settings = db.prepare('SELECT * FROM settings').all();
+        // Convert array of {key, value} to an object
+        const settingsObj = {};
+        for (const s of settings) {
+            settingsObj[s.key] = s.value;
+        }
+        res.json(settingsObj);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/admin/settings - update a global setting
+router.put('/settings', requireAdmin, (req, res) => {
+    const { key, value } = req.body;
+    if (!key || value === undefined) {
+        return res.status(400).json({ error: 'Missing key or value' });
+    }
+
+    try {
+        db.prepare(`
+            INSERT INTO settings (key, value) 
+            VALUES (?, ?) 
+            ON CONFLICT(key) DO UPDATE SET value = ?
+        `).run(key, value.toString(), value.toString());
+
+        // Log the change
+        const adminStr = req.user ? (req.user.display_name || req.user.username) : 'System';
+        db.prepare(`
+            INSERT INTO admin_logs (admin_id, admin_name, action, target_name, details)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(req.user ? req.user.id : null, adminStr, 'UPDATE_SETTING', key, `Changed to ${value}`);
+
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

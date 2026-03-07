@@ -105,6 +105,11 @@ db.exec(`
     context TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
   );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 `);
 
 // Migration: Add 'approved' column to users table if missing
@@ -135,6 +140,12 @@ if (!productCols.find(c => c.name === 'sort_order')) {
 const inventoryCols = db.prepare("PRAGMA table_info(inventory)").all();
 if (!inventoryCols.find(c => c.name === 'sort_order')) {
   db.exec(`ALTER TABLE inventory ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`);
+}
+
+// Seed Settings
+const webhookSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('webhook_enabled');
+if (!webhookSetting) {
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('webhook_enabled', 'true');
 }
 
 // Seed warehouses if not exist

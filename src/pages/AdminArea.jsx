@@ -11,7 +11,7 @@ import {
     ShieldCheck, Users, ScrollText, Crown, Shield, User, Eye,
     CheckCircle, AlertCircle, Swords, Clock, UserCheck, UserX,
     Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi,
-    Package, Plus, Trash2, ArrowUp, ArrowDown
+    Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Send
 } from 'lucide-react';
 
 const HARDCODED_IDS = [
@@ -1249,6 +1249,103 @@ function ProductManagement() {
     );
 }
 
+function SettingsManagement() {
+    const [settings, setSettings] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [status, setStatus] = useState(null);
+
+    const loadSettings = async () => {
+        try {
+            const res = await fetch('/api/admin/settings', { credentials: 'include' });
+            if (res.ok) {
+                const data = await res.json();
+                setSettings(data);
+            }
+        } catch (err) {
+            console.error('Failed to load settings', err);
+        }
+        setLoading(false);
+    };
+
+    useEffect(() => { loadSettings(); }, []);
+
+    const toggleSetting = async (key, currentValue) => {
+        const newValue = currentValue === 'true' ? 'false' : 'true';
+
+        // Optimistic update
+        setSettings(prev => ({ ...prev, [key]: newValue }));
+
+        try {
+            const res = await fetch('/api/admin/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ key, value: newValue })
+            });
+
+            if (res.ok) {
+                setStatus({ type: 'success', message: 'Einstellung gespeichert' });
+                setTimeout(() => setStatus(null), 3000);
+            } else {
+                throw new Error('Save failed');
+            }
+        } catch (err) {
+            setStatus({ type: 'error', message: 'Fehler beim Speichern' });
+            loadSettings(); // revert
+        }
+    };
+
+    if (loading) return <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></div>;
+
+    const webhookEnabled = settings.webhook_enabled === 'true';
+
+    return (
+        <Card className="backdrop-blur-sm bg-card/80 border-border/50 max-w-2xl">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5 text-primary" />
+                    System-Einstellungen
+                </CardTitle>
+                <CardDescription>Globale App-Einstellungen konfigurieren</CardDescription>
+            </CardHeader>
+            <CardContent>
+                {status && (
+                    <div className={`mb-6 flex items-center gap-2 p-3 rounded-lg ${status.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                        {status.type === 'success' ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
+                        <span className="text-sm font-medium">{status.message}</span>
+                    </div>
+                )}
+
+                <div className="space-y-6">
+                    {/* Webhook Toggle */}
+                    <div className="flex items-center justify-between p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors">
+                        <div className="space-y-1">
+                            <h3 className="font-semibold text-sm flex items-center gap-2">
+                                <Send className="h-4 w-4 text-muted-foreground" />
+                                Discord Webhooks
+                            </h3>
+                            <p className="text-sm text-muted-foreground max-w-sm">
+                                Aktiviert oder deaktiviert alle automatischen Benachrichtigungen in den Discord-Kanal (Ein-/Auslagerungen, etc.).
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => toggleSetting('webhook_enabled', settings.webhook_enabled)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${webhookEnabled ? 'bg-primary' : 'bg-input'
+                                }`}
+                        >
+                            <span className="sr-only">Toggle Webhook</span>
+                            <span
+                                className={`inline-block h-5 w-5 transform rounded-full bg-background transition-transform ${webhookEnabled ? 'translate-x-6' : 'translate-x-1'
+                                    }`}
+                            />
+                        </button>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function AdminArea({ initialTab = 'roles' }) {
     const { isAdmin } = useAuth();
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -1280,6 +1377,7 @@ export default function AdminArea({ initialTab = 'roles' }) {
                     <TabsTrigger value="logs">System-Logs</TabsTrigger>
                     <TabsTrigger value="console">Konsole</TabsTrigger>
                     <TabsTrigger value="wsmonitor">WS Monitor</TabsTrigger>
+                    <TabsTrigger value="settings">System-Einst.</TabsTrigger>
                 </TabsList>
                 <TabsContent value="roles">
                     <RoleManagement />
@@ -1295,6 +1393,9 @@ export default function AdminArea({ initialTab = 'roles' }) {
                 </TabsContent>
                 <TabsContent value="wsmonitor">
                     <WsMonitor />
+                </TabsContent>
+                <TabsContent value="settings">
+                    <SettingsManagement />
                 </TabsContent>
             </Tabs>
         </div>
