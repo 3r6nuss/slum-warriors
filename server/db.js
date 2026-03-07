@@ -131,6 +131,12 @@ if (!productCols.find(c => c.name === 'sort_order')) {
   db.exec(`ALTER TABLE products ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`);
 }
 
+// Migration: Add 'sort_order' column to inventory table if missing
+const inventoryCols = db.prepare("PRAGMA table_info(inventory)").all();
+if (!inventoryCols.find(c => c.name === 'sort_order')) {
+  db.exec(`ALTER TABLE inventory ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`);
+}
+
 // Seed warehouses if not exist
 const warehouseCount = db.prepare('SELECT COUNT(*) as count FROM warehouses').get();
 if (warehouseCount.count === 0) {

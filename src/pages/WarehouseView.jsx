@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     Package, Shield, Warehouse, Settings, Save, X, Loader2,
-    PackagePlus, PackageMinus, CheckCircle, AlertCircle
+    PackagePlus, PackageMinus, CheckCircle, AlertCircle, GripHorizontal
 } from 'lucide-react';
 
 const warehouseMeta = {
@@ -222,9 +222,20 @@ export default function WarehouseView() {
 
     const warehouseId = activeWarehouse;
 
+    // Local state for optimistic drag & drop reordering
+    const [localItems, setLocalItems] = useState([]);
+    const [draggedIdx, setDraggedIdx] = useState(null);
+
     const warehouseItems = useMemo(() => {
         return inventory.filter(i => i.warehouse_id === parseInt(warehouseId));
     }, [inventory, warehouseId]);
+
+    // Sync local items when websocket inventory updates, unless we are currently dragging
+    useEffect(() => {
+        if (draggedIdx === null) {
+            setLocalItems(warehouseItems);
+        }
+    }, [warehouseItems, draggedIdx]);
 
     const meta = warehouseMeta[warehouseId] || { label: 'Lager', icon: Warehouse, type: 'normal' };
     const Icon = meta.icon;
@@ -339,6 +350,72 @@ export default function WarehouseView() {
         setIsSaving(false);
     };
 
+    /* --- Drag & Drop Handlers --- */
+    const handleDragStart = (e, index) => {
+        if (isEditing) {
+            e.preventDefault();
+            return;
+        }
+        setDraggedIdx(index);
+        // This is necessary for Firefox
+        e.dataTransfer.setData('text/plain', index);
+        e.dataTransfer.effectAllowed = 'move';
+
+        // Optional: Make the drag image a bit transparent
+        requestAnimationFrame(() => {
+            e.target.style.opacity = '0.5';
+        });
+    };
+
+    const handleDragOver = (e, index) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        if (draggedIdx === null || draggedIdx === index) return;
+
+        // Optimistically update the list order during drag
+        setLocalItems((prevItems) => {
+            const newItems = [...prevItems];
+            const draggedItem = newItems.splice(draggedIdx, 1)[0];
+            newItems.splice(index, 0, draggedItem);
+            return newItems;
+        });
+
+        setDraggedIdx(index);
+    };
+
+    const handleDragEnd = async (e) => {
+        e.target.style.opacity = '1';
+
+        if (draggedIdx === null) return;
+
+        // 1. Prepare payload based on the new final sorted localItems
+        const currentItems = [...localItems];
+        const orderPayload = currentItems.map((item, idx) => ({
+            product_id: item.product_id,
+            sort_order: idx
+        }));
+
+        setDraggedIdx(null); // Reset drag state
+
+        // 2. Send to backend
+        try {
+            const res = await fetch(`/api/inventory/${warehouseId}/reorder`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ order: orderPayload })
+            });
+
+            if (!res.ok) {
+                setQuickStatus({ type: 'error', message: 'Sortierung konnte nicht gespeichert werden.' });
+                setTimeout(() => setQuickStatus(null), 3000);
+            }
+        } catch (err) {
+            console.error('Failed to save reorder', err);
+        }
+    };
+
     const availableWarehouses = isLeadership
         ? [
             { id: '2', label: 'Normales Lager', icon: Warehouse },
@@ -435,17 +512,30 @@ export default function WarehouseView() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mt-4">
-                        {warehouseItems.map((item) => (
+                        {localItems.map((item, index) => (
                             <div
                                 key={item.id}
+                                draggable={!isEditing}
+                                onDragStart={(e) => handleDragStart(e, index)}
+                                onDragOver={(e) => handleDragOver(e, index)}
+                                onDragEnd={handleDragEnd}
                                 className={`group relative flex flex-col p-4 rounded-xl border transition-all duration-200 ${!isEditing
-                                    ? 'cursor-pointer border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
-                                    : 'border-border/50 bg-card'
+                                    ? 'cursor-grab active:cursor-grabbing border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
+                                    : 'border-border/50 bg-card cursor-default'
                                     }`}
+                                style={{
+                                    opacity: draggedIdx === index ? 0.5 : 1,
+                                    transform: draggedIdx === index ? 'scale(0.98)' : 'scale(1)',
+                                }}
                                 onClick={() => {
                                     if (!isEditing) setSelectedItem(item);
                                 }}
                             >
+                                {!isEditing && (
+                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-40 transition-opacity pointer-events-none">
+                                        <GripHorizontal className="h-4 w-4" />
+                                    </div>
+                                )}
                                 <div className="flex items-start justify-between mb-3">
                                     <div className={`p-2 rounded-lg transition-colors ${!isEditing ? 'bg-secondary group-hover:bg-primary/10' : 'bg-secondary'}`}>
                                         <Package className={`h-5 w-5 ${!isEditing ? 'text-muted-foreground group-hover:text-primary' : 'text-muted-foreground'}`} />
@@ -527,7 +617,7 @@ export default function WarehouseView() {
                             </div>
                         ))}
                     </div>
-                    {warehouseItems.length === 0 && (
+                    {localItems.length === 0 && (
                         <div className="text-center text-muted-foreground py-12 border-2 border-dashed border-border/50 rounded-xl mt-4">
                             <Package className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
                             <p>Keine Produkte im Lager</p>
