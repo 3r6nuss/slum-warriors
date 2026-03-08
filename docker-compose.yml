@@ -11,7 +11,7 @@ services:
       - SESSION_SECRET=HIER_EIN_SICHERES_PASSWORT_EINSETZEN
       - DISCORD_CLIENT_ID=1477714942647079074
       - DISCORD_CLIENT_SECRET=A-mHq0cHPnOaIIh03GvCi1rebJn3ciu8
-      - DISCORD_REDIRECT_URI=https://sw.3r6nuss.de/auth/callback
+      - DISCORD_REDIRECT_URI=https://nochnaya.3r6nuss.de/auth/callback
       - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1479919998674665653/p6t5j7ICPOJSZxV6TOqB90V1Q-XZDJo2Y4IjT6GD3pY1ZAK2UG8T2vPsSZFiqWen-O5M
     networks:
       - nginx-proxy-manager_default
