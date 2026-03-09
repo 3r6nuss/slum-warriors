@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useInventorySocket } from '@/lib/websocket';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,8 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     Package, Shield, Warehouse, Settings, Save, X, Loader2,
-    PackagePlus, PackageMinus, CheckCircle, AlertCircle, GripHorizontal
+    PackagePlus, PackageMinus, CheckCircle, AlertCircle, GripHorizontal, ScanLine
 } from 'lucide-react';
+
+const InventoryScanner = lazy(() => import('@/components/InventoryScanner'));
 
 const warehouseMeta = {
     1: { label: 'Führungslager', icon: Shield, type: 'leadership' },
@@ -219,6 +221,7 @@ export default function WarehouseView() {
     const [editStatus, setEditStatus] = useState(null);
 
     const [quickStatus, setQuickStatus] = useState(null);
+    const [showScanner, setShowScanner] = useState(false);
 
     const warehouseId = activeWarehouse;
 
@@ -490,6 +493,15 @@ export default function WarehouseView() {
                     </div>
                     {(isAdmin || isLeadership) && (
                         <div className="flex gap-2 relative top-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowScanner(true)}
+                                className="border-violet-500/30 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300"
+                            >
+                                <ScanLine className="h-4 w-4 mr-2" />
+                                Scanner
+                            </Button>
                             {!isEditing ? (
                                 <Button variant="outline" size="sm" onClick={handleEditToggle}>
                                     <Settings className="h-4 w-4 mr-2" />
@@ -660,6 +672,22 @@ export default function WarehouseView() {
                     user={user}
                     onClose={() => setSelectedItem(null)}
                 />
+            )}
+
+            {/* Inventory Scanner Overlay */}
+            {showScanner && (
+                <Suspense fallback={
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                }>
+                    <InventoryScanner
+                        warehouseItems={warehouseItems}
+                        warehouseId={warehouseId}
+                        user={user}
+                        onClose={() => setShowScanner(false)}
+                    />
+                </Suspense>
             )}
         </div>
     );

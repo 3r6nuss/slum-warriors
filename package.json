@@ -23,6 +23,7 @@
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",
     "tailwind-merge": "^3.5.0",
+    "tesseract.js": "^5.1.1",
     "ws": "^8.19.0"
   },
   "devDependencies": {
