@@ -5,177 +5,160 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     X, Upload, ScanLine, Loader2, CheckCircle, AlertCircle,
-    ArrowRight, Save, RotateCcw
+    ArrowRight, Save, RotateCcw, Grid3x3
 } from 'lucide-react';
 
-/* ── Fuzzy string matching (Levenshtein distance) ─────────────── */
+/* ── Fuzzy matching ───────────────────────────────────────────── */
 function levenshtein(a, b) {
     const m = a.length, n = b.length;
     const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
     for (let i = 0; i <= m; i++) dp[i][0] = i;
     for (let j = 0; j <= n; j++) dp[0][j] = j;
-    for (let i = 1; i <= m; i++) {
-        for (let j = 1; j <= n; j++) {
+    for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
             dp[i][j] = a[i - 1] === b[j - 1]
                 ? dp[i - 1][j - 1]
                 : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-        }
-    }
     return dp[m][n];
 }
 
 function bestMatch(ocrName, productNames) {
     const normalized = ocrName.toLowerCase().trim();
     if (!normalized || normalized.length < 2) return null;
-
-    let best = null;
-    let bestScore = Infinity;
-
+    let best = null, bestScore = Infinity;
     for (const name of productNames) {
-        const normalizedProduct = name.toLowerCase().trim();
-        const dist = levenshtein(normalized, normalizedProduct);
-        // Bonus for substring containment
-        const containsBonus =
-            normalizedProduct.includes(normalized) || normalized.includes(normalizedProduct) ? -2 : 0;
-        const score = dist + containsBonus;
-        if (score < bestScore) {
-            bestScore = score;
-            best = name;
-        }
+        const np = name.toLowerCase().trim();
+        const dist = levenshtein(normalized, np);
+        const bonus = np.includes(normalized) || normalized.includes(np) ? -2 : 0;
+        const score = dist + bonus;
+        if (score < bestScore) { bestScore = score; best = name; }
     }
-
-    // Accept matches with < 40% edit distance
     const threshold = Math.max(3, Math.floor((best?.length || 0) * 0.45));
     return bestScore <= threshold ? best : null;
 }
 
-/* ── Parse German-style number ("6.669" → 6669, "160.999" → 160999) ─── */
 function parseGermanNumber(str) {
     const cleaned = str.replace(/\./g, '').replace(/,/g, '').replace(/\s/g, '');
     const num = parseInt(cleaned);
-    return isNaN(num) ? 0 : num;
+    return isNaN(num) || num < 0 ? 0 : num;
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   Spatial Grid Parser – uses Tesseract word bounding boxes
-   to group words into item cells, then extract qty + name per cell
+   Per-cell OCR: crop each grid cell from the image and OCR it
+   individually, so numbers never get mixed between cells.
    ══════════════════════════════════════════════════════════════════ */
-function parseWordsIntoItems(words) {
-    if (!words || words.length === 0) return [];
 
-    // Filter out very low confidence words and tiny words
-    const goodWords = words.filter(w =>
-        w.confidence > 30 && w.text.trim().length > 0
-    );
-
-    if (goodWords.length === 0) return [];
-
-    // Find grid structure by analyzing X positions (columns) and Y positions (rows).
-    // Each inventory cell has a number at the top and a name at the bottom.
-    // We cluster words by their center positions.
-
-    const centers = goodWords.map(w => ({
-        word: w,
-        cx: (w.bbox.x0 + w.bbox.x1) / 2,
-        cy: (w.bbox.y0 + w.bbox.y1) / 2,
-        width: w.bbox.x1 - w.bbox.x0,
-        height: w.bbox.y1 - w.bbox.y0,
-    }));
-
-    // Determine cell boundaries by finding clusters in X and Y.
-    // Use the overall image dimensions to estimate the grid.
-    const allX = centers.map(c => c.cx);
-    const allY = centers.map(c => c.cy);
-    const imgWidth = Math.max(...goodWords.map(w => w.bbox.x1));
-    const imgHeight = Math.max(...goodWords.map(w => w.bbox.y1));
-
-    // Estimate number of columns by clustering X positions
-    const numCols = estimateGridDivisions(allX, imgWidth);
-    const numRows = estimateGridDivisions(allY, imgHeight);
-
-    const cellWidth = imgWidth / numCols;
-    const cellHeight = imgHeight / numRows;
-
-    // Assign each word to a grid cell
-    const cells = new Map(); // "col,row" -> { numbers: [], texts: [] }
-
-    for (const c of centers) {
-        const col = Math.floor(c.cx / cellWidth);
-        const row = Math.floor(c.cy / cellHeight);
-        const key = `${col},${row}`;
-
-        if (!cells.has(key)) {
-            cells.set(key, { numbers: [], texts: [], col, row });
-        }
-
-        const cell = cells.get(key);
-        const text = c.word.text.trim();
-
-        // Check if this word is a number (possibly with dots for thousands)
-        if (/^[\d.,]+$/.test(text) && parseGermanNumber(text) > 0) {
-            cell.numbers.push({ text, cy: c.cy, confidence: c.word.confidence });
-        } else if (text.length >= 2 && !/^[^\w]+$/.test(text)) {
-            cell.texts.push({ text, cy: c.cy, confidence: c.word.confidence });
-        }
-    }
-
-    // Build items from cells
-    const items = [];
-    for (const [, cell] of cells) {
-        if (cell.numbers.length === 0 && cell.texts.length === 0) continue;
-
-        // Pick the quantity: the topmost number in the cell (the badge)
-        const sortedNumbers = [...cell.numbers].sort((a, b) => a.cy - b.cy);
-        const quantity = sortedNumbers.length > 0
-            ? parseGermanNumber(sortedNumbers[0].text)
-            : null;
-
-        // Pick the name: concatenate text words sorted by Y then X position
-        const sortedTexts = [...cell.texts].sort((a, b) => a.cy - b.cy);
-        const name = sortedTexts.map(t => t.text).join(' ').trim();
-
-        if (quantity !== null && name) {
-            items.push({ name, quantity });
-        } else if (name && quantity === null) {
-            // A cell with only text, no number – could be a header or label
-            // Skip it
-        } else if (quantity !== null && !name) {
-            // Only a number, no text – might be a stray number
-            // Skip it
-        }
-    }
-
-    return items;
+/** Crop a region from source canvas and return as data URL */
+function cropCell(sourceCanvas, x, y, w, h) {
+    const crop = document.createElement('canvas');
+    crop.width = w;
+    crop.height = h;
+    const ctx = crop.getContext('2d');
+    ctx.drawImage(sourceCanvas, x, y, w, h, 0, 0, w, h);
+    return crop.toDataURL('image/png');
 }
 
-/** Estimate the number of grid divisions along one axis */
-function estimateGridDivisions(positions, totalSize) {
-    if (positions.length === 0) return 1;
+/** Parse OCR text from a single cell into quantity + name */
+function parseCellText(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    let quantity = null;
+    let nameParts = [];
 
-    // Sort positions and find natural gaps
-    const sorted = [...new Set(positions)].sort((a, b) => a - b);
-
-    // Use a simple approach: try common grid sizes (2-8 columns/rows)
-    // and pick the one where words cluster best
-    let bestDivs = 4; // default for FiveM inventory
-    let bestScore = Infinity;
-
-    for (let divs = 2; divs <= 8; divs++) {
-        const cellSize = totalSize / divs;
-        // For each position, measure distance to nearest cell center
-        let totalDist = 0;
-        for (const pos of sorted) {
-            const cellCenter = (Math.floor(pos / cellSize) + 0.5) * cellSize;
-            totalDist += Math.abs(pos - cellCenter);
-        }
-        const avgDist = totalDist / sorted.length;
-        if (avgDist < bestScore) {
-            bestScore = avgDist;
-            bestDivs = divs;
+    for (const line of lines) {
+        // Is this line purely a number? (e.g. "160.999", "37", "6.669")
+        if (/^[\d.,]+$/.test(line)) {
+            const num = parseGermanNumber(line);
+            if (num > 0 && quantity === null) {
+                quantity = num;
+            }
+        } else {
+            // Check if the line starts with a number followed by text
+            const numTextMatch = line.match(/^([\d.,]+)\s+(.+)$/);
+            if (numTextMatch && quantity === null) {
+                const num = parseGermanNumber(numTextMatch[1]);
+                if (num > 0) {
+                    quantity = num;
+                    const rest = numTextMatch[2].trim();
+                    if (rest.length >= 2) nameParts.push(rest);
+                }
+            } else {
+                // Filter out garbage: must have at least one letter
+                if (/[a-zA-ZäöüÄÖÜß]/.test(line) && line.length >= 2) {
+                    nameParts.push(line);
+                }
+            }
         }
     }
 
-    return bestDivs;
+    const name = nameParts.join(' ').trim();
+    return { quantity, name: name || null };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Pixel-based row detection: scan horizontal pixel strips to find
+   the gaps between card rows
+   ══════════════════════════════════════════════════════════════════ */
+function detectRows(canvas, numCols) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    const data = ctx.getImageData(0, 0, w, h).data;
+
+    // Compute average brightness per row of pixels
+    const rowBrightness = [];
+    for (let y = 0; y < h; y++) {
+        let sum = 0;
+        for (let x = 0; x < w; x++) {
+            const idx = (y * w + x) * 4;
+            sum += 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+        }
+        rowBrightness.push(sum / w);
+    }
+
+    // The items are bright-ish cards on a dark background.
+    // Row gaps should be consistently darker (lower brightness) strips.
+    const avgBrightness = rowBrightness.reduce((a, b) => a + b, 0) / h;
+
+    // Find continuous dark bands (darker than average) as row separators
+    const darkThreshold = avgBrightness * 0.6;
+    const gaps = []; // [startY, endY]
+    let inGap = false, gapStart = 0;
+
+    for (let y = 0; y < h; y++) {
+        if (rowBrightness[y] < darkThreshold) {
+            if (!inGap) { inGap = true; gapStart = y; }
+        } else {
+            if (inGap) {
+                const gapSize = y - gapStart;
+                // Only consider gaps wider than 3px
+                if (gapSize > 3) gaps.push([gapStart, y]);
+                inGap = false;
+            }
+        }
+    }
+
+    // Convert gaps to row boundaries
+    const rows = [];
+    let prevEnd = 0;
+    for (const [gStart, gEnd] of gaps) {
+        if (gStart - prevEnd > 30) { // minimum row height
+            rows.push([prevEnd, gStart]);
+        }
+        prevEnd = gEnd;
+    }
+    if (h - prevEnd > 30) rows.push([prevEnd, h]);
+
+    // Fallback: if detection failed, estimate from item count
+    if (rows.length === 0) {
+        const estimatedRowHeight = w / numCols; // cards are roughly square-ish
+        const numRows = Math.max(1, Math.round(h / estimatedRowHeight));
+        const cellH = Math.floor(h / numRows);
+        for (let r = 0; r < numRows; r++) {
+            rows.push([r * cellH, Math.min((r + 1) * cellH, h)]);
+        }
+    }
+
+    return rows;
 }
 
 
@@ -192,54 +175,45 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     const [applying, setApplying] = useState(false);
     const [applyStatus, setApplyStatus] = useState(null);
     const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
+    const [numCols, setNumCols] = useState(4); // FiveM inventory is typically 4 columns
 
     const fileInputRef = useRef(null);
     const dropZoneRef = useRef(null);
 
     const productNames = warehouseItems.map(i => i.product_name);
 
-    /* ── Handle file selection ─────────────────────────────────── */
+    /* ── File handling ─────────────────────────────────────────── */
     const handleFile = useCallback((file) => {
         if (!file || !file.type.startsWith('image/')) return;
         setImage(file);
         setScanResults(null);
         setApplyStatus(null);
-
         const reader = new FileReader();
         reader.onload = (e) => setImagePreview(e.target.result);
         reader.readAsDataURL(file);
     }, []);
 
-    /* ── Drag & Drop ──────────────────────────────────────────── */
     const handleDragOver = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         dropZoneRef.current?.classList.add('ring-2', 'ring-primary', 'bg-primary/5');
     }, []);
-
     const handleDragLeave = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         dropZoneRef.current?.classList.remove('ring-2', 'ring-primary', 'bg-primary/5');
     }, []);
-
     const handleDrop = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         dropZoneRef.current?.classList.remove('ring-2', 'ring-primary', 'bg-primary/5');
-        const file = e.dataTransfer.files[0];
-        handleFile(file);
+        handleFile(e.dataTransfer.files[0]);
     }, [handleFile]);
 
-    /* ── Clipboard paste support ──────────────────────────────── */
     useEffect(() => {
         const handlePaste = (e) => {
             const items = e.clipboardData?.items;
             if (!items) return;
             for (const item of items) {
                 if (item.type.startsWith('image/')) {
-                    const file = item.getAsFile();
-                    handleFile(file);
+                    handleFile(item.getAsFile());
                     e.preventDefault();
                     break;
                 }
@@ -249,7 +223,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         return () => window.removeEventListener('paste', handlePaste);
     }, [handleFile]);
 
-    /* ── Run OCR scan ─────────────────────────────────────────── */
+    /* ── Run per-cell OCR scan ────────────────────────────────── */
     const runScan = async () => {
         if (!image) return;
         setScanning(true);
@@ -260,34 +234,70 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         try {
             const Tesseract = await import('tesseract.js');
 
-            setProgressLabel('Texterkennung läuft...');
-            setProgress(15);
+            setProgressLabel('Bild wird analysiert...');
+            setProgress(5);
 
-            // Run OCR on the original image (no preprocessing — keep colors
-            // so Tesseract can use its own binarization which is smarter)
-            const result = await Tesseract.recognize(imagePreview, 'deu+eng', {
-                logger: (m) => {
-                    if (m.status === 'recognizing text') {
-                        setProgress(15 + Math.round(m.progress * 75));
-                        setProgressLabel('Texterkennung läuft...');
-                    }
+            // Load the image onto a canvas
+            const img = new Image();
+            img.src = imagePreview;
+            await new Promise((resolve) => { img.onload = resolve; });
+
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            // Detect rows using pixel analysis
+            const rows = detectRows(canvas, numCols);
+            const cellWidth = Math.floor(canvas.width / numCols);
+
+            console.log(`Grid: ${numCols} cols × ${rows.length} rows`);
+            console.log('Row boundaries:', rows);
+
+            // Build list of cell crops
+            const cells = [];
+            for (let r = 0; r < rows.length; r++) {
+                const [y1, y2] = rows[r];
+                for (let c = 0; c < numCols; c++) {
+                    const x = c * cellWidth;
+                    const w = cellWidth;
+                    const h = y2 - y1;
+                    cells.push({
+                        row: r, col: c,
+                        dataUrl: cropCell(canvas, x, y1, w, h),
+                    });
                 }
-            });
+            }
+
+            setProgressLabel(`${cells.length} Zellen erkannt, scanne...`);
+            setProgress(10);
+
+            // OCR each cell individually
+            const parsed = [];
+            for (let i = 0; i < cells.length; i++) {
+                const cell = cells[i];
+                const pct = 10 + Math.round((i / cells.length) * 80);
+                setProgress(pct);
+                setProgressLabel(`Zelle ${i + 1}/${cells.length} wird gescannt...`);
+
+                try {
+                    const result = await Tesseract.recognize(cell.dataUrl, 'deu+eng');
+                    const cellText = result.data.text;
+                    const { quantity, name } = parseCellText(cellText);
+
+                    console.log(`Cell [${cell.row},${cell.col}]: "${cellText.trim()}" → qty=${quantity}, name="${name}"`);
+
+                    if (quantity !== null && name) {
+                        parsed.push({ name, quantity, row: cell.row, col: cell.col });
+                    }
+                } catch (err) {
+                    console.warn(`Cell [${cell.row},${cell.col}] OCR failed:`, err);
+                }
+            }
 
             setProgress(92);
-            setProgressLabel('Wörter werden räumlich analysiert...');
-
-            const ocrText = result.data.text;
-            const words = result.data.words;
-
-            console.log('OCR raw text:', ocrText);
-            console.log('OCR words with bboxes:', words?.map(w => ({
-                text: w.text, bbox: w.bbox, conf: w.confidence
-            })));
-
-            // Use word-level spatial parsing instead of line-based parsing
-            const parsed = parseWordsIntoItems(words);
-            console.log('Spatially parsed items:', parsed);
+            setProgressLabel('Ergebnisse werden abgeglichen...');
 
             // Match against known products
             const matched = parsed.map(item => {
@@ -295,7 +305,6 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                 const warehouseItem = match
                     ? warehouseItems.find(wi => wi.product_name === match)
                     : null;
-
                 return {
                     ocrName: item.name,
                     ocrQuantity: item.quantity,
@@ -307,53 +316,42 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                 };
             });
 
-            // Find warehouse items not matched
-            const matchedProductIds = new Set(
-                matched.filter(m => m.matchedItem).map(m => m.matchedItem.product_id)
-            );
+            // Find unscanned warehouse items
+            const matchedIds = new Set(matched.filter(m => m.matchedItem).map(m => m.matchedItem.product_id));
             const unscanned = warehouseItems
-                .filter(wi => !matchedProductIds.has(wi.product_id))
+                .filter(wi => !matchedIds.has(wi.product_id))
                 .map(wi => ({
-                    ocrName: null,
-                    ocrQuantity: null,
-                    matchedName: wi.product_name,
-                    matchedItem: wi,
-                    currentQuantity: wi.quantity,
-                    diff: null,
-                    accepted: false,
-                    notScanned: true,
+                    ocrName: null, ocrQuantity: null,
+                    matchedName: wi.product_name, matchedItem: wi,
+                    currentQuantity: wi.quantity, diff: null,
+                    accepted: false, notScanned: true,
                 }));
 
             setProgress(100);
             setProgressLabel('Fertig!');
-            setScanResults({ matched, unscanned, rawText: ocrText });
+            setScanResults({
+                matched, unscanned,
+                gridInfo: `${numCols} Spalten × ${rows.length} Zeilen = ${cells.length} Zellen`,
+            });
         } catch (err) {
             console.error('OCR Error:', err);
             setScanResults({ error: err.message });
         }
-
         setScanning(false);
     };
 
-    /* ── Apply scanned values ─────────────────────────────────── */
+    /* ── Apply results ────────────────────────────────────────── */
     const applyResults = async () => {
         if (!scanResults?.matched || !personName) return;
-
         const changes = scanResults.matched
             .filter(r => r.accepted && r.matchedItem && r.diff !== 0 && r.diff !== null)
-            .map(r => ({
-                product_id: r.matchedItem.product_id,
-                new_quantity: r.ocrQuantity,
-            }));
+            .map(r => ({ product_id: r.matchedItem.product_id, new_quantity: r.ocrQuantity }));
 
         if (changes.length === 0) {
             setApplyStatus({ type: 'error', message: 'Keine Änderungen zum Übernehmen.' });
             return;
         }
-
-        setApplying(true);
-        setApplyStatus(null);
-
+        setApplying(true); setApplyStatus(null);
         try {
             const res = await fetch('/api/adjustments/batch', {
                 method: 'POST',
@@ -367,37 +365,32 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
             });
             const data = await res.json();
             if (res.ok) {
-                setApplyStatus({ type: 'success', message: `${changes.length} Produkt(e) erfolgreich aktualisiert!` });
+                setApplyStatus({ type: 'success', message: `${changes.length} Produkt(e) aktualisiert!` });
             } else {
                 setApplyStatus({ type: 'error', message: data.error || 'Fehler beim Speichern.' });
             }
         } catch {
             setApplyStatus({ type: 'error', message: 'Verbindungsfehler.' });
         }
-
         setApplying(false);
     };
 
-    /* ── Toggle accept ────────────────────────────────────────── */
-    const toggleAccept = (index) => {
+    const toggleAccept = (idx) => {
         setScanResults(prev => {
-            const newMatched = [...prev.matched];
-            newMatched[index] = { ...newMatched[index], accepted: !newMatched[index].accepted };
-            return { ...prev, matched: newMatched };
+            const m = [...prev.matched];
+            m[idx] = { ...m[idx], accepted: !m[idx].accepted };
+            return { ...prev, matched: m };
         });
     };
 
-    /* ── Reset ────────────────────────────────────────────────── */
     const reset = () => {
-        setImage(null);
-        setImagePreview(null);
-        setScanResults(null);
-        setApplyStatus(null);
-        setProgress(0);
+        setImage(null); setImagePreview(null);
+        setScanResults(null); setApplyStatus(null); setProgress(0);
     };
 
     const acceptedChanges = scanResults?.matched?.filter(r => r.accepted && r.diff !== 0 && r.diff !== null) || [];
 
+    /* ── Render ────────────────────────────────────────────────── */
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
@@ -405,7 +398,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                 className="relative z-10 w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-card border border-border/50 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* ── Header ───────────────────────────────────── */}
+                {/* Header */}
                 <div className="flex items-center justify-between p-5 border-b border-border/50 shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 rounded-xl bg-gradient-to-br from-violet-500/20 to-blue-500/20">
@@ -414,7 +407,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                         <div>
                             <h3 className="text-lg font-bold">Inventar Scanner</h3>
                             <p className="text-sm text-muted-foreground">
-                                Screenshot hochladen → automatisch erkennen
+                                Screenshot hochladen → Zelle für Zelle scannen
                             </p>
                         </div>
                     </div>
@@ -423,10 +416,10 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                     </Button>
                 </div>
 
-                {/* ── Body (scrollable) ────────────────────────── */}
+                {/* Body */}
                 <div className="flex-1 overflow-y-auto p-5 space-y-5">
 
-                    {/* Upload area */}
+                    {/* Upload */}
                     {!imagePreview && (
                         <div
                             ref={dropZoneRef}
@@ -447,7 +440,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                     </p>
                                 </div>
                                 <p className="text-xs text-muted-foreground/60">
-                                    PNG, JPG, WebP • Am besten nur den Inventar-Bereich zuschneiden
+                                    Am besten nur die Item-Karten zuschneiden (ohne Header)
                                 </p>
                             </div>
                             <input
@@ -460,15 +453,11 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                         </div>
                     )}
 
-                    {/* Image preview + scan button */}
+                    {/* Preview + Settings + Scan */}
                     {imagePreview && !scanResults && (
                         <div className="space-y-4">
                             <div className="relative rounded-xl overflow-hidden border border-border/50 bg-secondary/30">
-                                <img
-                                    src={imagePreview}
-                                    alt="Screenshot"
-                                    className="w-full max-h-64 object-contain"
-                                />
+                                <img src={imagePreview} alt="Screenshot" className="w-full max-h-64 object-contain" />
                                 <div className="absolute top-3 right-3">
                                     <Button variant="secondary" size="sm" onClick={reset}>
                                         <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
@@ -477,8 +466,30 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                 </div>
                             </div>
 
+                            {/* Grid settings */}
+                            <div className="flex items-center gap-4 p-3 rounded-lg bg-secondary/30 border border-border/30">
+                                <Grid3x3 className="h-5 w-5 text-muted-foreground shrink-0" />
+                                <div className="flex items-center gap-3 flex-1">
+                                    <Label htmlFor="numCols" className="text-sm whitespace-nowrap">Spalten im Inventar:</Label>
+                                    <div className="flex items-center gap-2">
+                                        {[3, 4, 5, 6].map(n => (
+                                            <button
+                                                key={n}
+                                                onClick={() => setNumCols(n)}
+                                                className={`h-9 w-9 rounded-lg font-bold text-sm transition-all ${numCols === n
+                                                    ? 'bg-primary text-primary-foreground shadow-md'
+                                                    : 'bg-secondary hover:bg-secondary/80 text-muted-foreground'
+                                                    }`}
+                                            >
+                                                {n}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm text-amber-200">
-                                <strong>Tipp:</strong> Für beste Ergebnisse nur den Inventar-Bereich (die Item-Karten) zuschneiden, ohne die Überschrift und Suchleiste.
+                                <strong>Tipp:</strong> Schneide den Screenshot so zu, dass nur die Item-Karten sichtbar sind (ohne den "Hauslager"-Header und die Suchleiste). Zähle die Spalten und stelle sie oben ein.
                             </div>
 
                             {scanning ? (
@@ -498,7 +509,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                             ) : (
                                 <Button onClick={runScan} className="w-full" size="lg">
                                     <ScanLine className="h-5 w-5 mr-2" />
-                                    Jetzt scannen
+                                    Jetzt scannen ({numCols} Spalten)
                                 </Button>
                             )}
                         </div>
@@ -518,10 +529,10 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                     {/* Results */}
                     {scanResults?.matched && (
                         <div className="space-y-4">
-                            {/* Stats */}
-                            <div className="flex gap-3 flex-wrap">
+                            <div className="flex gap-3 flex-wrap items-center">
                                 <Badge variant="outline" className="text-sm py-1 px-3">
-                                    {scanResults.matched.length} erkannt
+                                    <Grid3x3 className="h-3 w-3 mr-1.5" />
+                                    {scanResults.gridInfo}
                                 </Badge>
                                 <Badge variant="success" className="text-sm py-1 px-3">
                                     {scanResults.matched.filter(r => r.matchedItem).length} zugeordnet
@@ -533,10 +544,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                 )}
                             </div>
 
-                            {/* Small preview */}
                             {imagePreview && (
                                 <div className="rounded-lg overflow-hidden border border-border/30 bg-secondary/20">
-                                    <img src={imagePreview} alt="Screenshot" className="w-full max-h-32 object-contain opacity-60" />
+                                    <img src={imagePreview} alt="" className="w-full max-h-32 object-contain opacity-60" />
                                 </div>
                             )}
 
@@ -614,7 +624,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                                     </td>
                                                 </tr>
                                                 {scanResults.unscanned.map((row, idx) => (
-                                                    <tr key={`unscanned-${idx}`} className="border-b border-border/30 opacity-40">
+                                                    <tr key={`u-${idx}`} className="border-b border-border/30 opacity-40">
                                                         <td className="p-3" />
                                                         <td className="p-3 text-muted-foreground italic">—</td>
                                                         <td className="p-3 text-muted-foreground">{row.matchedName}</td>
@@ -631,7 +641,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                 </table>
                             </div>
 
-                            {/* Apply section */}
+                            {/* Apply */}
                             {acceptedChanges.length > 0 && (
                                 <div className="space-y-4 p-4 rounded-xl border border-primary/20 bg-primary/5">
                                     <h4 className="font-semibold flex items-center gap-2">
@@ -647,57 +657,30 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                             onChange={(e) => setPersonName(e.target.value)}
                                         />
                                     </div>
-
                                     {applyStatus && (
                                         <div className={`flex items-center gap-2 p-3 rounded-lg ${applyStatus.type === 'success'
-                                            ? 'bg-success/10 text-success'
-                                            : 'bg-destructive/10 text-destructive'
+                                            ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
                                             }`}>
-                                            {applyStatus.type === 'success'
-                                                ? <CheckCircle className="h-4 w-4" />
-                                                : <AlertCircle className="h-4 w-4" />
-                                            }
+                                            {applyStatus.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
                                             <span className="text-sm font-medium">{applyStatus.message}</span>
                                         </div>
                                     )}
-
-                                    <Button
-                                        onClick={applyResults}
-                                        disabled={applying || !personName || applyStatus?.type === 'success'}
-                                        className="w-full"
-                                    >
+                                    <Button onClick={applyResults} disabled={applying || !personName || applyStatus?.type === 'success'} className="w-full">
                                         {applying ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                                Wird übernommen...
-                                            </>
+                                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Wird übernommen...</>
                                         ) : (
-                                            <>
-                                                <Save className="h-4 w-4 mr-2" />
-                                                Bestände aktualisieren
-                                            </>
+                                            <><Save className="h-4 w-4 mr-2" />Bestände aktualisieren</>
                                         )}
                                     </Button>
                                 </div>
                             )}
 
-                            {/* Actions */}
                             <div className="flex gap-2 justify-end">
                                 <Button variant="outline" onClick={reset}>
                                     <RotateCcw className="h-4 w-4 mr-2" />
                                     Neuer Scan
                                 </Button>
                             </div>
-
-                            {/* Debug: raw OCR text */}
-                            <details className="text-xs">
-                                <summary className="text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                                    Roher OCR-Text anzeigen
-                                </summary>
-                                <pre className="mt-2 p-3 rounded-lg bg-secondary/50 font-mono text-muted-foreground whitespace-pre-wrap max-h-40 overflow-y-auto">
-                                    {scanResults.rawText}
-                                </pre>
-                            </details>
                         </div>
                     )}
                 </div>
