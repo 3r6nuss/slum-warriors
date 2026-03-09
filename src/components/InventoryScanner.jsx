@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     X, Upload, ScanLine, Loader2, CheckCircle, AlertCircle,
-    ArrowRight, Save, RotateCcw, Grid3x3, Crop
+    ArrowRight, Save, RotateCcw, Grid3x3, Move, Plus, Crop
 } from 'lucide-react';
 
 /* ── Fuzzy matching ───────────────────────────────────────────── */
@@ -43,254 +43,69 @@ function parseGermanNumber(str) {
     return isNaN(num) || num < 0 ? 0 : num;
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   Auto-detect the right inventory panel from a full GTA screenshot.
-
-   The FiveM inventory has two dark-blue panels side by side.
-   We detect the blue UI region, find the vertical divider
-   between left/right panels, and crop the right panel's item grid
-   (skipping the header row with title + search bar).
-   ══════════════════════════════════════════════════════════════════ */
-
-/** Check if a pixel is the characteristic FiveM inventory blue */
-function isInventoryBlue(r, g, b, a) {
-    // The inventory panels have a dark blue semi-transparent look.
-    // Typical values: R:15-80, G:25-100, B:80-200, with high alpha.
-    // We also accept slightly brighter blues for the card areas.
-    if (a < 100) return false; // too transparent
-    const blueRatio = b / (r + g + b + 1);
-    return blueRatio > 0.38 && b > 60 && r < 120 && g < 140;
-}
-
-/**
- * Find the right inventory panel bounds from a full screenshot.
- * Returns { x, y, width, height } of just the item grid area,
- * or null if detection fails.
- */
-function detectRightPanel(canvas) {
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width;
-    const H = canvas.height;
-    const data = ctx.getImageData(0, 0, W, H).data;
-
-    // Step 1: For every column, count how many pixels are "inventory blue"
-    const colBlueCounts = new Float32Array(W);
-    for (let x = 0; x < W; x++) {
-        let count = 0;
-        // Sample every 2nd pixel for speed
-        for (let y = 0; y < H; y += 2) {
-            const idx = (y * W + x) * 4;
-            if (isInventoryBlue(data[idx], data[idx + 1], data[idx + 2], data[idx + 3])) {
-                count++;
-            }
-        }
-        colBlueCounts[x] = count / (H / 2); // normalize to 0-1
-    }
-
-    // Step 2: Find the UI region (columns with >20% blue pixels)
-    const blueThreshold = 0.20;
-    let uiLeft = -1, uiRight = -1;
-    for (let x = 0; x < W; x++) {
-        if (colBlueCounts[x] > blueThreshold) {
-            if (uiLeft === -1) uiLeft = x;
-            uiRight = x;
-        }
-    }
-
-    if (uiLeft === -1 || uiRight - uiLeft < W * 0.2) {
-        console.log('Could not detect inventory UI region');
-        return null;
-    }
-
-    console.log(`Inventory UI detected: x=${uiLeft} to x=${uiRight} (${uiRight - uiLeft}px wide)`);
-
-    // Step 3: Find the vertical divider between left and right panels.
-    // The divider is in the middle ~40-60% of the UI region and has a
-    // brief dip in blue density (or a different shade).
-    const uiWidth = uiRight - uiLeft;
-    const searchStart = uiLeft + Math.floor(uiWidth * 0.35);
-    const searchEnd = uiLeft + Math.floor(uiWidth * 0.65);
-
-    let minBlue = Infinity, dividerX = uiLeft + Math.floor(uiWidth / 2);
-    // Use a sliding window to find the thinnest blue region (the gap/divider)
-    const windowSize = 5;
-    for (let x = searchStart; x < searchEnd - windowSize; x++) {
-        let sum = 0;
-        for (let dx = 0; dx < windowSize; dx++) sum += colBlueCounts[x + dx];
-        if (sum < minBlue) {
-            minBlue = sum;
-            dividerX = x + Math.floor(windowSize / 2);
-        }
-    }
-
-    console.log(`Panel divider at x=${dividerX}`);
-
-    // Step 4: The right panel starts just after the divider
-    const rightPanelX = dividerX + 5;
-    const rightPanelWidth = uiRight - rightPanelX;
-
-    if (rightPanelWidth < 100) {
-        console.log('Right panel too narrow');
-        return null;
-    }
-
-    // Step 5: Find the top and bottom of the right panel by scanning rows
-    // within the right panel's X range
-    const rowBlueCounts = new Float32Array(H);
-    for (let y = 0; y < H; y++) {
-        let count = 0;
-        for (let x = rightPanelX; x < uiRight; x += 2) {
-            const idx = (y * W + x) * 4;
-            if (isInventoryBlue(data[idx], data[idx + 1], data[idx + 2], data[idx + 3])) {
-                count++;
-            }
-        }
-        rowBlueCounts[y] = count / ((uiRight - rightPanelX) / 2);
-    }
-
-    let panelTop = -1, panelBottom = -1;
-    for (let y = 0; y < H; y++) {
-        if (rowBlueCounts[y] > blueThreshold) {
-            if (panelTop === -1) panelTop = y;
-            panelBottom = y;
-        }
-    }
-
-    if (panelTop === -1) {
-        console.log('Could not detect panel vertical bounds');
-        return null;
-    }
-
-    const panelHeight = panelBottom - panelTop;
-
-    // Step 6: Skip the header area (title + weight/search bar).
-    // The header is roughly the top 12-15% of the panel.
-    const headerSkip = Math.floor(panelHeight * 0.13);
-    const itemGridTop = panelTop + headerSkip;
-    const itemGridHeight = panelBottom - itemGridTop;
-
-    console.log(`Right panel: x=${rightPanelX}, y=${itemGridTop}, w=${rightPanelWidth}, h=${itemGridHeight}`);
-    console.log(`(skipped ${headerSkip}px header)`);
-
-    return {
-        x: rightPanelX,
-        y: itemGridTop,
-        width: rightPanelWidth,
-        height: itemGridHeight,
-    };
-}
-
-/* ── Crop helpers ─────────────────────────────────────────────── */
-function cropRegion(sourceCanvas, x, y, w, h) {
-    const crop = document.createElement('canvas');
-    crop.width = w;
-    crop.height = h;
-    crop.getContext('2d').drawImage(sourceCanvas, x, y, w, h, 0, 0, w, h);
-    return crop;
-}
-
-function canvasToDataUrl(canvas) {
-    return canvas.toDataURL('image/png');
-}
-
-/* ── Parse OCR text from one cell ─────────────────────────────── */
+/* ── Parse cell text into quantity + name ─────────────────────── */
 function parseCellText(text) {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     let quantity = null;
     let nameParts = [];
-
     for (const line of lines) {
         if (/^[\d.,]+$/.test(line)) {
             const num = parseGermanNumber(line);
             if (num > 0 && quantity === null) quantity = num;
         } else {
-            const numTextMatch = line.match(/^([\d.,]+)\s+(.+)$/);
-            if (numTextMatch && quantity === null) {
-                const num = parseGermanNumber(numTextMatch[1]);
-                if (num > 0) {
-                    quantity = num;
-                    const rest = numTextMatch[2].trim();
-                    if (rest.length >= 2) nameParts.push(rest);
-                }
+            const m = line.match(/^([\d.,]+)\s+(.+)$/);
+            if (m && quantity === null) {
+                const num = parseGermanNumber(m[1]);
+                if (num > 0) { quantity = num; if (m[2].trim().length >= 2) nameParts.push(m[2].trim()); }
             } else if (/[a-zA-ZäöüÄÖÜß]/.test(line) && line.length >= 2) {
                 nameParts.push(line);
             }
         }
     }
-
     return { quantity, name: nameParts.join(' ').trim() || null };
 }
 
-/* ── Detect rows within the item grid ─────────────────────────── */
-function detectRows(canvas, numCols) {
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width, h = canvas.height;
-    const data = ctx.getImageData(0, 0, w, h).data;
-
-    const rowBrightness = [];
-    for (let y = 0; y < h; y++) {
-        let sum = 0;
-        for (let x = 0; x < w; x += 2) {
-            const idx = (y * w + x) * 4;
-            sum += 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-        }
-        rowBrightness.push(sum / (w / 2));
-    }
-
-    const avgB = rowBrightness.reduce((a, b) => a + b, 0) / h;
-    const darkThreshold = avgB * 0.65;
-
-    const gaps = [];
-    let inGap = false, gapStart = 0;
-    for (let y = 0; y < h; y++) {
-        if (rowBrightness[y] < darkThreshold) {
-            if (!inGap) { inGap = true; gapStart = y; }
-        } else {
-            if (inGap) {
-                if (y - gapStart > 3) gaps.push([gapStart, y]);
-                inGap = false;
-            }
-        }
-    }
-
-    const rows = [];
-    let prevEnd = 0;
-    for (const [gStart, gEnd] of gaps) {
-        if (gStart - prevEnd > 30) rows.push([prevEnd, gStart]);
-        prevEnd = gEnd;
-    }
-    if (h - prevEnd > 30) rows.push([prevEnd, h]);
-
-    // Fallback
-    if (rows.length === 0) {
-        const cellH = Math.floor(w / numCols);
-        const numRows = Math.max(1, Math.round(h / cellH));
-        const rH = Math.floor(h / numRows);
-        for (let r = 0; r < numRows; r++)
-            rows.push([r * rH, Math.min((r + 1) * rH, h)]);
-    }
-
-    return rows;
+/* ── Crop helper ──────────────────────────────────────────────── */
+function cropToDataUrl(canvas, x, y, w, h) {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w));
+    c.height = Math.max(1, Math.round(h));
+    c.getContext('2d').drawImage(canvas,
+        Math.round(x), Math.round(y), Math.round(w), Math.round(h),
+        0, 0, c.width, c.height);
+    return c.toDataURL('image/png');
 }
 
 
 /* ══════════════════════════════════════════════════════════════════
-   Main Component
+   Main Component – Interactive Grid Overlay Scanner
    ══════════════════════════════════════════════════════════════════ */
 export default function InventoryScanner({ warehouseItems, warehouseId, user, onClose }) {
-    const [image, setImage] = useState(null);
+    // Image state
     const [imagePreview, setImagePreview] = useState(null);
-    const [croppedPreview, setCroppedPreview] = useState(null);
+    const [imgNaturalSize, setImgNaturalSize] = useState(null); // { w, h }
+
+    // Grid overlay state (in % of image)
+    const [gridPos, setGridPos] = useState({ x: 52, y: 18, w: 44, h: 74 });
+    const [numCols, setNumCols] = useState(4);
+    const [numRows, setNumRows] = useState(3);
+
+    // Scan state
     const [scanning, setScanning] = useState(false);
     const [progress, setProgress] = useState(0);
     const [progressLabel, setProgressLabel] = useState('');
-    const [scanResults, setScanResults] = useState(null);
+
+    // Results
+    const [allResults, setAllResults] = useState([]); // accumulated across screenshots
+    const [scanResults, setScanResults] = useState(null); // processed results
     const [applying, setApplying] = useState(false);
     const [applyStatus, setApplyStatus] = useState(null);
     const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
-    const [numCols, setNumCols] = useState(4);
-    const [detectionInfo, setDetectionInfo] = useState(null);
 
+    // Drag state
+    const [dragging, setDragging] = useState(null); // 'move' | 'resize' | null
+    const [dragStart, setDragStart] = useState(null);
+    const containerRef = useRef(null);
     const fileInputRef = useRef(null);
     const dropZoneRef = useRef(null);
 
@@ -299,14 +114,15 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     /* ── File handling ─────────────────────────────────────────── */
     const handleFile = useCallback((file) => {
         if (!file || !file.type.startsWith('image/')) return;
-        setImage(file);
-        setScanResults(null);
-        setApplyStatus(null);
-        setCroppedPreview(null);
-        setDetectionInfo(null);
-
         const reader = new FileReader();
-        reader.onload = (e) => setImagePreview(e.target.result);
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                setImgNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+                setImagePreview(e.target.result);
+            };
+            img.src = e.target.result;
+        };
         reader.readAsDataURL(file);
     }, []);
 
@@ -340,98 +156,161 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         return () => window.removeEventListener('paste', handlePaste);
     }, [handleFile]);
 
-    /* ── Run scan ─────────────────────────────────────────────── */
+    /* ── Grid drag handlers ───────────────────────────────────── */
+    const getMousePct = useCallback((e) => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return { x: 0, y: 0 };
+        return {
+            x: ((e.clientX - rect.left) / rect.width) * 100,
+            y: ((e.clientY - rect.top) / rect.height) * 100,
+        };
+    }, []);
+
+    const handleMouseDown = useCallback((e, mode) => {
+        e.preventDefault(); e.stopPropagation();
+        setDragging(mode);
+        setDragStart({ mouse: getMousePct(e), grid: { ...gridPos } });
+    }, [getMousePct, gridPos]);
+
+    useEffect(() => {
+        if (!dragging) return;
+        const handleMove = (e) => {
+            const current = getMousePct(e);
+            const dx = current.x - dragStart.mouse.x;
+            const dy = current.y - dragStart.mouse.y;
+
+            if (dragging === 'move') {
+                setGridPos({
+                    ...dragStart.grid,
+                    x: Math.max(0, Math.min(100 - dragStart.grid.w, dragStart.grid.x + dx)),
+                    y: Math.max(0, Math.min(100 - dragStart.grid.h, dragStart.grid.y + dy)),
+                });
+            } else if (dragging === 'resize') {
+                setGridPos({
+                    ...dragStart.grid,
+                    w: Math.max(10, Math.min(100 - dragStart.grid.x, dragStart.grid.w + dx)),
+                    h: Math.max(10, Math.min(100 - dragStart.grid.y, dragStart.grid.h + dy)),
+                });
+            }
+        };
+        const handleUp = () => setDragging(null);
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleUp);
+        return () => {
+            window.removeEventListener('mousemove', handleMove);
+            window.removeEventListener('mouseup', handleUp);
+        };
+    }, [dragging, dragStart, getMousePct]);
+
+    /* ── Run scan on current screenshot ───────────────────────── */
     const runScan = async () => {
-        if (!image) return;
+        if (!imagePreview || !imgNaturalSize) return;
         setScanning(true);
         setProgress(0);
         setProgressLabel('Lade Tesseract.js...');
-        setScanResults(null);
-        setCroppedPreview(null);
 
         try {
             const Tesseract = await import('tesseract.js');
 
-            setProgressLabel('Bild wird analysiert...');
-            setProgress(3);
-
-            // Load image onto canvas
+            // Load image onto canvas at full resolution
             const img = new Image();
             img.src = imagePreview;
-            await new Promise((resolve) => { img.onload = resolve; });
+            await new Promise(r => { img.onload = r; });
 
-            const fullCanvas = document.createElement('canvas');
-            fullCanvas.width = img.naturalWidth;
-            fullCanvas.height = img.naturalHeight;
-            fullCanvas.getContext('2d').drawImage(img, 0, 0);
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            canvas.getContext('2d').drawImage(img, 0, 0);
 
-            setProgressLabel('Rechtes Inventarfeld wird gesucht...');
+            // Convert grid position from % to pixels
+            const gx = (gridPos.x / 100) * canvas.width;
+            const gy = (gridPos.y / 100) * canvas.height;
+            const gw = (gridPos.w / 100) * canvas.width;
+            const gh = (gridPos.h / 100) * canvas.height;
+
+            const cellW = gw / numCols;
+            const cellH = gh / numRows;
+
+            const totalCells = numCols * numRows;
+            setProgressLabel(`${totalCells} Zellen scannen...`);
             setProgress(5);
 
-            // Auto-detect the right panel
-            const panel = detectRightPanel(fullCanvas);
+            const newResults = [];
 
-            let gridCanvas;
-            if (panel) {
-                // Successfully detected → crop to item grid
-                gridCanvas = cropRegion(fullCanvas, panel.x, panel.y, panel.width, panel.height);
-                setCroppedPreview(canvasToDataUrl(gridCanvas));
-                setDetectionInfo(`Rechtes Panel erkannt: ${panel.width}×${panel.height}px (ab x=${panel.x})`);
-            } else {
-                // Fallback: use the entire image (user may have already cropped)
-                gridCanvas = fullCanvas;
-                setDetectionInfo('Kein Panel erkannt – scanne gesamtes Bild');
-            }
+            for (let row = 0; row < numRows; row++) {
+                for (let col = 0; col < numCols; col++) {
+                    const cellX = gx + col * cellW;
+                    const cellY = gy + row * cellH;
+                    const cellIdx = row * numCols + col + 1;
 
-            setProgressLabel('Grid wird aufgeteilt...');
-            setProgress(8);
+                    setProgress(5 + Math.round((cellIdx / totalCells) * 85));
+                    setProgressLabel(`Zelle ${cellIdx}/${totalCells}...`);
 
-            // Detect rows and split into cells
-            const rows = detectRows(gridCanvas, numCols);
-            const cellWidth = Math.floor(gridCanvas.width / numCols);
+                    // Crop the NUMBER BADGE area (top ~22% of cell)
+                    const numCrop = cropToDataUrl(canvas, cellX, cellY, cellW, cellH * 0.22);
 
-            console.log(`Grid: ${numCols} cols × ${rows.length} rows`);
+                    // Crop the NAME area (bottom ~22% of cell)
+                    const nameCrop = cropToDataUrl(canvas, cellX, cellY + cellH * 0.78, cellW, cellH * 0.22);
 
-            const cells = [];
-            for (let r = 0; r < rows.length; r++) {
-                const [y1, y2] = rows[r];
-                for (let c = 0; c < numCols; c++) {
-                    cells.push({
-                        row: r, col: c,
-                        dataUrl: canvasToDataUrl(
-                            cropRegion(gridCanvas, c * cellWidth, y1, cellWidth, y2 - y1)
-                        ),
-                    });
-                }
-            }
+                    let quantity = null, name = null;
 
-            setProgressLabel(`${cells.length} Zellen gefunden, scanne...`);
-            setProgress(10);
+                    try {
+                        // OCR the number region
+                        const numResult = await Tesseract.recognize(numCrop, 'eng', {
+                            tessedit_char_whitelist: '0123456789.,',
+                        });
+                        const numText = numResult.data.text.trim();
+                        if (numText) {
+                            const parsed = parseGermanNumber(numText);
+                            if (parsed > 0) quantity = parsed;
+                        }
+                    } catch { /* skip */ }
 
-            // OCR each cell
-            const parsed = [];
-            for (let i = 0; i < cells.length; i++) {
-                const cell = cells[i];
-                setProgress(10 + Math.round((i / cells.length) * 80));
-                setProgressLabel(`Zelle ${i + 1}/${cells.length}...`);
+                    try {
+                        // OCR the name region
+                        const nameResult = await Tesseract.recognize(nameCrop, 'deu+eng');
+                        const nameText = nameResult.data.text.trim();
+                        if (nameText && /[a-zA-ZäöüÄÖÜß]/.test(nameText) && nameText.length >= 2) {
+                            name = nameText.replace(/\n/g, ' ').trim();
+                        }
+                    } catch { /* skip */ }
 
-                try {
-                    const result = await Tesseract.recognize(cell.dataUrl, 'deu+eng');
-                    const { quantity, name } = parseCellText(result.data.text);
-                    console.log(`[${cell.row},${cell.col}] "${result.data.text.trim()}" → qty=${quantity} name="${name}"`);
+                    console.log(`Cell [${row},${col}]: qty=${quantity}, name="${name}"`);
+
                     if (quantity !== null && name) {
-                        parsed.push({ name, quantity, row: cell.row, col: cell.col });
+                        newResults.push({ name, quantity });
                     }
-                } catch (err) {
-                    console.warn(`Cell [${cell.row},${cell.col}] failed:`, err);
                 }
             }
 
-            setProgress(92);
+            // Accumulate results (add to previous scans, update duplicates)
+            setAllResults(prev => {
+                const merged = [...prev];
+                for (const item of newResults) {
+                    const existIdx = merged.findIndex(m =>
+                        m.name.toLowerCase() === item.name.toLowerCase()
+                    );
+                    if (existIdx >= 0) {
+                        merged[existIdx] = item; // update existing
+                    } else {
+                        merged.push(item);
+                    }
+                }
+                return merged;
+            });
+
+            setProgress(95);
             setProgressLabel('Abgleich...');
 
-            // Match
-            const matched = parsed.map(item => {
+            // Build results from all accumulated data
+            const accumResults = [...allResults];
+            for (const item of newResults) {
+                const existIdx = accumResults.findIndex(m => m.name.toLowerCase() === item.name.toLowerCase());
+                if (existIdx >= 0) accumResults[existIdx] = item;
+                else accumResults.push(item);
+            }
+
+            const matched = accumResults.map(item => {
                 const match = bestMatch(item.name, productNames);
                 const wi = match ? warehouseItems.find(w => w.product_name === match) : null;
                 return {
@@ -455,15 +334,20 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
 
             setProgress(100);
             setProgressLabel('Fertig!');
-            setScanResults({
-                matched, unscanned,
-                gridInfo: `${numCols} Spalten × ${rows.length} Zeilen = ${cells.length} Zellen`,
-            });
+            setScanResults({ matched, unscanned, scanCount: accumResults.length });
+
         } catch (err) {
-            console.error('OCR Error:', err);
+            console.error('Scan error:', err);
             setScanResults({ error: err.message });
         }
         setScanning(false);
+    };
+
+    /* ── Load next screenshot (keep grid + results) ───────────── */
+    const loadNextScreenshot = () => {
+        setImagePreview(null);
+        setImgNaturalSize(null);
+        // Keep: gridPos, numCols, numRows, allResults, scanResults
     };
 
     /* ── Apply ────────────────────────────────────────────────── */
@@ -501,9 +385,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     };
 
     const reset = () => {
-        setImage(null); setImagePreview(null); setCroppedPreview(null);
-        setScanResults(null); setApplyStatus(null); setProgress(0);
-        setDetectionInfo(null);
+        setImagePreview(null); setImgNaturalSize(null);
+        setScanResults(null); setApplyStatus(null);
+        setAllResults([]); setProgress(0);
     };
 
     const acceptedChanges = scanResults?.matched?.filter(r => r.accepted && r.diff !== 0 && r.diff !== null) || [];
@@ -513,118 +397,218 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
             <div
-                className="relative z-10 w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-card border border-border/50 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                className="relative z-10 w-full max-w-5xl max-h-[92vh] flex flex-col rounded-2xl bg-card border border-border/50 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-border/50 shrink-0">
+                <div className="flex items-center justify-between p-4 border-b border-border/50 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-violet-500/20 to-blue-500/20">
+                        <div className="p-2 rounded-xl bg-gradient-to-br from-violet-500/20 to-blue-500/20">
                             <ScanLine className="h-5 w-5 text-violet-400" />
                         </div>
                         <div>
                             <h3 className="text-lg font-bold">Inventar Scanner</h3>
-                            <p className="text-sm text-muted-foreground">
-                                Ganzen Screenshot reinwerfen – rechtes Panel wird automatisch erkannt
+                            <p className="text-xs text-muted-foreground">
+                                Grid über die Items ziehen → scannen → scrollen → nochmal scannen
                             </p>
                         </div>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
-                        <X className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        {allResults.length > 0 && (
+                            <Badge variant="success" className="text-xs">
+                                {allResults.length} Items gesammelt
+                            </Badge>
+                        )}
+                        <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
+                            <X className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Body */}
-                <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
-                    {/* Upload */}
-                    {!imagePreview && (
+                    {/* Upload area */}
+                    {!imagePreview && !scanResults && (
                         <div
                             ref={dropZoneRef}
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
                             onClick={() => fileInputRef.current?.click()}
-                            className="border-2 border-dashed border-border/50 rounded-xl p-12 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all duration-200"
+                            className="border-2 border-dashed border-border/50 rounded-xl p-10 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
                         >
-                            <div className="flex flex-col items-center gap-4">
+                            <div className="flex flex-col items-center gap-3">
                                 <div className="p-4 rounded-2xl bg-secondary">
                                     <Upload className="h-8 w-8 text-muted-foreground" />
                                 </div>
-                                <div>
-                                    <p className="font-semibold text-lg">GTA Screenshot reinwerfen</p>
-                                    <p className="text-sm text-muted-foreground mt-1">
-                                        Kompletter Screenshot • <kbd className="px-1.5 py-0.5 rounded bg-secondary text-xs font-mono">Strg+V</kbd> oder Drag & Drop
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
-                                    <Crop className="h-3.5 w-3.5" />
-                                    Rechtes Inventar-Panel wird automatisch erkannt
-                                </div>
+                                <p className="font-semibold text-lg">GTA Screenshot reinwerfen</p>
+                                <p className="text-sm text-muted-foreground">
+                                    Kompletter Screenshot • <kbd className="px-1.5 py-0.5 rounded bg-secondary text-xs font-mono">Strg+V</kbd> oder Drag & Drop
+                                </p>
                             </div>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(e) => handleFile(e.target.files[0])}
-                            />
+                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+                                onChange={(e) => handleFile(e.target.files[0])} />
                         </div>
                     )}
 
-                    {/* Preview + Settings */}
-                    {imagePreview && !scanResults && (
-                        <div className="space-y-4">
-                            <div className="relative rounded-xl overflow-hidden border border-border/50 bg-secondary/30">
-                                <img src={imagePreview} alt="Screenshot" className="w-full max-h-48 object-contain" />
-                                <div className="absolute top-3 right-3">
-                                    <Button variant="secondary" size="sm" onClick={reset}>
-                                        <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                                        Anderes Bild
-                                    </Button>
+                    {/* Upload area for NEXT screenshot (when we already have results) */}
+                    {!imagePreview && scanResults && (
+                        <div
+                            ref={dropZoneRef}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                            onClick={() => fileInputRef.current?.click()}
+                            className="border-2 border-dashed border-violet-500/30 rounded-xl p-6 text-center cursor-pointer hover:border-violet-500/60 hover:bg-violet-500/5 transition-all"
+                        >
+                            <div className="flex items-center justify-center gap-3">
+                                <Plus className="h-5 w-5 text-violet-400" />
+                                <p className="font-medium text-violet-300">Nächsten Screenshot laden (nach Scrollen)</p>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">Grid-Position bleibt erhalten</p>
+                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+                                onChange={(e) => handleFile(e.target.files[0])} />
+                        </div>
+                    )}
+
+                    {/* Image with Grid Overlay */}
+                    {imagePreview && (
+                        <div className="space-y-3">
+                            {/* Grid settings bar */}
+                            <div className="flex items-center gap-4 p-2.5 rounded-lg bg-secondary/30 border border-border/30 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                    <Grid3x3 className="h-4 w-4 text-muted-foreground" />
+                                    <Label className="text-xs whitespace-nowrap">Spalten:</Label>
+                                    {[3, 4, 5, 6].map(n => (
+                                        <button key={n} onClick={() => setNumCols(n)}
+                                            className={`h-7 w-7 rounded text-xs font-bold transition-all ${numCols === n
+                                                ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:bg-secondary/80'}`}>
+                                            {n}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Label className="text-xs whitespace-nowrap">Zeilen:</Label>
+                                    {[2, 3, 4, 5, 6].map(n => (
+                                        <button key={n} onClick={() => setNumRows(n)}
+                                            className={`h-7 w-7 rounded text-xs font-bold transition-all ${numRows === n
+                                                ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:bg-secondary/80'}`}>
+                                            {n}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <Move className="h-3.5 w-3.5" />
+                                    Grid ziehen zum Positionieren
                                 </div>
                             </div>
 
-                            {/* Grid settings */}
-                            <div className="flex items-center gap-4 p-3 rounded-lg bg-secondary/30 border border-border/30">
-                                <Grid3x3 className="h-5 w-5 text-muted-foreground shrink-0" />
-                                <div className="flex items-center gap-3 flex-1">
-                                    <Label className="text-sm whitespace-nowrap">Spalten:</Label>
-                                    <div className="flex items-center gap-2">
-                                        {[3, 4, 5, 6].map(n => (
-                                            <button
-                                                key={n}
-                                                onClick={() => setNumCols(n)}
-                                                className={`h-9 w-9 rounded-lg font-bold text-sm transition-all ${numCols === n
-                                                    ? 'bg-primary text-primary-foreground shadow-md'
-                                                    : 'bg-secondary hover:bg-secondary/80 text-muted-foreground'
-                                                    }`}
-                                            >
-                                                {n}
-                                            </button>
-                                        ))}
+                            {/* Image container with overlay */}
+                            <div
+                                ref={containerRef}
+                                className="relative rounded-xl overflow-hidden border border-border/50 bg-black select-none"
+                                style={{ cursor: dragging ? 'grabbing' : 'default' }}
+                            >
+                                <img
+                                    src={imagePreview}
+                                    alt="Screenshot"
+                                    className="w-full block"
+                                    draggable={false}
+                                    style={{ maxHeight: '50vh', objectFit: 'contain' }}
+                                />
+
+                                {/* Semi-transparent dark overlay outside the grid */}
+                                <div className="absolute inset-0 pointer-events-none"
+                                    style={{
+                                        background: `
+                                            linear-gradient(to right, rgba(0,0,0,0.5) ${gridPos.x}%, transparent ${gridPos.x}%, transparent ${gridPos.x + gridPos.w}%, rgba(0,0,0,0.5) ${gridPos.x + gridPos.w}%),
+                                            linear-gradient(to bottom, rgba(0,0,0,0.5) ${gridPos.y}%, transparent ${gridPos.y}%, transparent ${gridPos.y + gridPos.h}%, rgba(0,0,0,0.5) ${gridPos.y + gridPos.h}%)
+                                        `
+                                    }}
+                                />
+
+                                {/* Grid overlay */}
+                                <div
+                                    className="absolute border-2 border-violet-400/80"
+                                    style={{
+                                        left: `${gridPos.x}%`, top: `${gridPos.y}%`,
+                                        width: `${gridPos.w}%`, height: `${gridPos.h}%`,
+                                    }}
+                                >
+                                    {/* Move handle (center) */}
+                                    <div
+                                        className="absolute inset-0 cursor-grab active:cursor-grabbing"
+                                        onMouseDown={(e) => handleMouseDown(e, 'move')}
+                                    />
+
+                                    {/* Column lines */}
+                                    {Array.from({ length: numCols - 1 }, (_, i) => (
+                                        <div key={`col-${i}`}
+                                            className="absolute top-0 bottom-0 w-px bg-violet-400/50"
+                                            style={{ left: `${((i + 1) / numCols) * 100}%` }}
+                                        />
+                                    ))}
+
+                                    {/* Row lines */}
+                                    {Array.from({ length: numRows - 1 }, (_, i) => (
+                                        <div key={`row-${i}`}
+                                            className="absolute left-0 right-0 h-px bg-violet-400/50"
+                                            style={{ top: `${((i + 1) / numRows) * 100}%` }}
+                                        />
+                                    ))}
+
+                                    {/* Show which part of each cell will be scanned (number region + name region) */}
+                                    {Array.from({ length: numCols * numRows }, (_, i) => {
+                                        const col = i % numCols, row = Math.floor(i / numCols);
+                                        const cw = 100 / numCols, ch = 100 / numRows;
+                                        return (
+                                            <div key={`cell-${i}`} className="absolute pointer-events-none"
+                                                style={{ left: `${col * cw}%`, top: `${row * ch}%`, width: `${cw}%`, height: `${ch}%` }}>
+                                                {/* Number region highlight */}
+                                                <div className="absolute inset-x-1 top-0.5 bg-emerald-400/20 border border-emerald-400/40 rounded-sm"
+                                                    style={{ height: '22%' }}>
+                                                    <span className="text-[7px] text-emerald-300 px-0.5">Zahl</span>
+                                                </div>
+                                                {/* Name region highlight */}
+                                                <div className="absolute inset-x-1 bottom-0.5 bg-blue-400/20 border border-blue-400/40 rounded-sm"
+                                                    style={{ height: '22%' }}>
+                                                    <span className="text-[7px] text-blue-300 px-0.5">Name</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* Resize handle (bottom-right corner) */}
+                                    <div
+                                        className="absolute -bottom-2 -right-2 w-5 h-5 bg-violet-500 border-2 border-violet-300 rounded-sm cursor-nwse-resize shadow-lg z-10"
+                                        onMouseDown={(e) => handleMouseDown(e, 'resize')}
+                                    />
+
+                                    {/* Move indicator (top-left) */}
+                                    <div className="absolute -top-2 -left-2 w-5 h-5 bg-violet-500 border-2 border-violet-300 rounded-sm cursor-grab shadow-lg z-10 flex items-center justify-center"
+                                        onMouseDown={(e) => handleMouseDown(e, 'move')}>
+                                        <Move className="h-3 w-3 text-white" />
                                     </div>
                                 </div>
                             </div>
 
+                            {/* Scan button */}
                             {scanning ? (
-                                <div className="space-y-3">
+                                <div className="space-y-2">
                                     <div className="flex items-center gap-3">
                                         <Loader2 className="h-5 w-5 animate-spin text-primary" />
                                         <span className="text-sm font-medium">{progressLabel}</span>
                                     </div>
-                                    <div className="w-full bg-secondary rounded-full h-2.5 overflow-hidden">
-                                        <div
-                                            className="bg-gradient-to-r from-violet-500 to-blue-500 h-full rounded-full transition-all duration-300"
-                                            style={{ width: `${progress}%` }}
-                                        />
+                                    <div className="w-full bg-secondary rounded-full h-2 overflow-hidden">
+                                        <div className="bg-gradient-to-r from-violet-500 to-blue-500 h-full rounded-full transition-all duration-300"
+                                            style={{ width: `${progress}%` }} />
                                     </div>
-                                    <p className="text-xs text-muted-foreground">{progress}%</p>
                                 </div>
                             ) : (
                                 <Button onClick={runScan} className="w-full" size="lg">
                                     <ScanLine className="h-5 w-5 mr-2" />
-                                    Jetzt scannen
+                                    Grid scannen ({numCols * numRows} Zellen)
                                 </Button>
                             )}
                         </div>
@@ -632,131 +616,95 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
 
                     {/* Error */}
                     {scanResults?.error && (
-                        <div className="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/20">
+                        <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/10 border border-destructive/20">
                             <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
-                            <div>
-                                <p className="font-medium text-destructive">Scanfehler</p>
-                                <p className="text-sm text-muted-foreground">{scanResults.error}</p>
-                            </div>
+                            <p className="text-sm text-destructive">{scanResults.error}</p>
                         </div>
                     )}
 
                     {/* Results */}
                     {scanResults?.matched && (
-                        <div className="space-y-4">
-                            {/* Info badges */}
-                            <div className="flex gap-3 flex-wrap items-center">
-                                {detectionInfo && (
-                                    <Badge variant="outline" className="text-sm py-1 px-3">
-                                        <Crop className="h-3 w-3 mr-1.5" />
-                                        {detectionInfo}
-                                    </Badge>
-                                )}
-                                <Badge variant="outline" className="text-sm py-1 px-3">
-                                    <Grid3x3 className="h-3 w-3 mr-1.5" />
-                                    {scanResults.gridInfo}
-                                </Badge>
-                                <Badge variant="success" className="text-sm py-1 px-3">
+                        <div className="space-y-3">
+                            <div className="flex gap-2 flex-wrap items-center">
+                                <Badge variant="success" className="text-xs py-1 px-2.5">
                                     {scanResults.matched.filter(r => r.matchedItem).length} zugeordnet
                                 </Badge>
                                 {scanResults.matched.filter(r => !r.matchedItem).length > 0 && (
-                                    <Badge variant="warning" className="text-sm py-1 px-3">
-                                        {scanResults.matched.filter(r => !r.matchedItem).length} nicht zugeordnet
+                                    <Badge variant="warning" className="text-xs py-1 px-2.5">
+                                        {scanResults.matched.filter(r => !r.matchedItem).length} unbekannt
                                     </Badge>
                                 )}
+                                <Badge variant="outline" className="text-xs py-1 px-2.5">
+                                    {scanResults.scanCount} total gescannt
+                                </Badge>
                             </div>
 
-                            {/* Cropped preview – show what was auto-detected */}
-                            {croppedPreview && (
-                                <details className="rounded-lg border border-border/30 overflow-hidden">
-                                    <summary className="p-3 cursor-pointer text-sm text-muted-foreground hover:text-foreground bg-secondary/20 transition-colors">
-                                        Erkannter Inventar-Bereich anzeigen
-                                    </summary>
-                                    <div className="border-t border-border/30 bg-secondary/10">
-                                        <img src={croppedPreview} alt="Erkannter Bereich" className="w-full max-h-48 object-contain" />
-                                    </div>
-                                </details>
-                            )}
-
-                            {/* Results table */}
+                            {/* Table */}
                             <div className="rounded-xl border border-border/50 overflow-hidden">
                                 <table className="w-full text-sm">
                                     <thead>
                                         <tr className="bg-secondary/50 border-b border-border/50">
-                                            <th className="text-left p-3 font-semibold w-8">✓</th>
-                                            <th className="text-left p-3 font-semibold">Erkannt (OCR)</th>
-                                            <th className="text-left p-3 font-semibold">
-                                                <ArrowRight className="h-3.5 w-3.5 inline mr-1" />
-                                                Zugeordnet
-                                            </th>
-                                            <th className="text-right p-3 font-semibold">Gescannt</th>
-                                            <th className="text-right p-3 font-semibold">Aktuell</th>
-                                            <th className="text-right p-3 font-semibold">Differenz</th>
+                                            <th className="text-left p-2.5 font-semibold w-8">✓</th>
+                                            <th className="text-left p-2.5 font-semibold">Erkannt</th>
+                                            <th className="text-left p-2.5 font-semibold"><ArrowRight className="h-3 w-3 inline mr-1" />Zugeordnet</th>
+                                            <th className="text-right p-2.5 font-semibold">Scan</th>
+                                            <th className="text-right p-2.5 font-semibold">Lager</th>
+                                            <th className="text-right p-2.5 font-semibold">Diff</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {scanResults.matched.map((row, idx) => (
-                                            <tr
-                                                key={idx}
-                                                className={`border-b border-border/30 transition-colors ${row.accepted ? 'bg-success/5' : 'opacity-50'
-                                                    } ${row.matchedItem ? 'cursor-pointer hover:bg-secondary/30' : ''}`}
-                                                onClick={() => row.matchedItem && toggleAccept(idx)}
-                                            >
-                                                <td className="p-3">
+                                            <tr key={idx}
+                                                className={`border-b border-border/30 transition-colors ${row.accepted ? 'bg-success/5' : 'opacity-50'} ${row.matchedItem ? 'cursor-pointer hover:bg-secondary/30' : ''}`}
+                                                onClick={() => row.matchedItem && toggleAccept(idx)}>
+                                                <td className="p-2.5">
                                                     {row.matchedItem && (
-                                                        <div className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${row.accepted
-                                                            ? 'bg-success border-success text-success-foreground' : 'border-border'
-                                                            }`}>
-                                                            {row.accepted && <CheckCircle className="h-3.5 w-3.5" />}
+                                                        <div className={`h-4.5 w-4.5 rounded border-2 flex items-center justify-center ${row.accepted
+                                                            ? 'bg-success border-success text-success-foreground' : 'border-border'}`}>
+                                                            {row.accepted && <CheckCircle className="h-3 w-3" />}
                                                         </div>
                                                     )}
                                                 </td>
-                                                <td className="p-3">
-                                                    <span className="font-mono text-xs bg-secondary/50 px-2 py-1 rounded">
-                                                        {row.ocrName}
-                                                    </span>
+                                                <td className="p-2.5">
+                                                    <span className="font-mono text-xs bg-secondary/50 px-1.5 py-0.5 rounded">{row.ocrName}</span>
                                                 </td>
-                                                <td className="p-3">
+                                                <td className="p-2.5">
                                                     {row.matchedName
-                                                        ? <span className="font-medium text-success">{row.matchedName}</span>
-                                                        : <span className="text-muted-foreground italic">—</span>}
+                                                        ? <span className="font-medium text-success text-xs">{row.matchedName}</span>
+                                                        : <span className="text-muted-foreground italic text-xs">—</span>}
                                                 </td>
-                                                <td className="p-3 text-right font-mono font-semibold">
+                                                <td className="p-2.5 text-right font-mono font-semibold text-xs">
                                                     {row.ocrQuantity?.toLocaleString('de-DE')}
                                                 </td>
-                                                <td className="p-3 text-right font-mono text-muted-foreground">
+                                                <td className="p-2.5 text-right font-mono text-muted-foreground text-xs">
                                                     {row.currentQuantity?.toLocaleString('de-DE') ?? '—'}
                                                 </td>
-                                                <td className="p-3 text-right font-mono font-semibold">
+                                                <td className="p-2.5 text-right font-mono font-semibold text-xs">
                                                     {row.diff !== null ? (
-                                                        <span className={
-                                                            row.diff > 0 ? 'text-success' :
-                                                                row.diff < 0 ? 'text-destructive' : 'text-muted-foreground'
-                                                        }>
+                                                        <span className={row.diff > 0 ? 'text-success' : row.diff < 0 ? 'text-destructive' : 'text-muted-foreground'}>
                                                             {row.diff > 0 && '+'}{row.diff.toLocaleString('de-DE')}
                                                         </span>
                                                     ) : '—'}
                                                 </td>
                                             </tr>
                                         ))}
-
                                         {scanResults.unscanned?.length > 0 && (
                                             <>
                                                 <tr>
-                                                    <td colSpan={6} className="p-3 bg-secondary/30 text-xs text-muted-foreground font-semibold uppercase tracking-wider">
-                                                        Nicht im Screenshot erkannt
+                                                    <td colSpan={6} className="p-2 bg-secondary/30 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                                                        Noch nicht gescannt
                                                     </td>
                                                 </tr>
                                                 {scanResults.unscanned.map((row, idx) => (
                                                     <tr key={`u-${idx}`} className="border-b border-border/30 opacity-40">
-                                                        <td className="p-3" />
-                                                        <td className="p-3 text-muted-foreground italic">—</td>
-                                                        <td className="p-3 text-muted-foreground">{row.matchedName}</td>
-                                                        <td className="p-3 text-right text-muted-foreground">—</td>
-                                                        <td className="p-3 text-right font-mono text-muted-foreground">
+                                                        <td className="p-2" />
+                                                        <td className="p-2 text-muted-foreground italic text-xs">—</td>
+                                                        <td className="p-2 text-muted-foreground text-xs">{row.matchedName}</td>
+                                                        <td className="p-2 text-right text-xs text-muted-foreground">—</td>
+                                                        <td className="p-2 text-right font-mono text-muted-foreground text-xs">
                                                             {row.currentQuantity?.toLocaleString('de-DE')}
                                                         </td>
-                                                        <td className="p-3 text-right text-muted-foreground">—</td>
+                                                        <td className="p-2 text-right text-xs text-muted-foreground">—</td>
                                                     </tr>
                                                 ))}
                                             </>
@@ -767,40 +715,33 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
 
                             {/* Apply */}
                             {acceptedChanges.length > 0 && (
-                                <div className="space-y-4 p-4 rounded-xl border border-primary/20 bg-primary/5">
-                                    <h4 className="font-semibold flex items-center gap-2">
+                                <div className="space-y-3 p-3 rounded-xl border border-primary/20 bg-primary/5">
+                                    <h4 className="font-semibold text-sm flex items-center gap-2">
                                         <Save className="h-4 w-4 text-primary" />
-                                        Bestände übernehmen ({acceptedChanges.length} Änderung{acceptedChanges.length > 1 ? 'en' : ''})
+                                        Bestände übernehmen ({acceptedChanges.length})
                                     </h4>
-                                    <div className="space-y-2">
-                                        <Label htmlFor="scanner-person">Dein Name *</Label>
-                                        <Input
-                                            id="scanner-person"
-                                            placeholder="Wer führt den Abgleich durch?"
-                                            value={personName}
-                                            onChange={(e) => setPersonName(e.target.value)}
-                                        />
+                                    <div className="space-y-1.5">
+                                        <Label htmlFor="sp" className="text-xs">Dein Name *</Label>
+                                        <Input id="sp" placeholder="Name..." value={personName}
+                                            onChange={(e) => setPersonName(e.target.value)} className="h-8 text-sm" />
                                     </div>
                                     {applyStatus && (
-                                        <div className={`flex items-center gap-2 p-3 rounded-lg ${applyStatus.type === 'success'
-                                            ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-                                            }`}>
-                                            {applyStatus.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-                                            <span className="text-sm font-medium">{applyStatus.message}</span>
+                                        <div className={`flex items-center gap-2 p-2 rounded-lg text-xs ${applyStatus.type === 'success'
+                                            ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                                            {applyStatus.type === 'success' ? <CheckCircle className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+                                            {applyStatus.message}
                                         </div>
                                     )}
-                                    <Button onClick={applyResults} disabled={applying || !personName || applyStatus?.type === 'success'} className="w-full">
-                                        {applying
-                                            ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Wird übernommen...</>
-                                            : <><Save className="h-4 w-4 mr-2" />Bestände aktualisieren</>}
+                                    <Button onClick={applyResults} disabled={applying || !personName || applyStatus?.type === 'success'} className="w-full" size="sm">
+                                        {applying ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Übernehme...</> : <><Save className="h-4 w-4 mr-2" />Aktualisieren</>}
                                     </Button>
                                 </div>
                             )}
 
                             <div className="flex gap-2 justify-end">
-                                <Button variant="outline" onClick={reset}>
-                                    <RotateCcw className="h-4 w-4 mr-2" />
-                                    Neuer Scan
+                                <Button variant="outline" size="sm" onClick={reset}>
+                                    <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                                    Alles zurücksetzen
                                 </Button>
                             </div>
                         </div>
