@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     X, Upload, ScanLine, Loader2, CheckCircle, AlertCircle,
-    ArrowRight, ImageIcon, Save, RotateCcw, ZoomIn
+    ArrowRight, Save, RotateCcw
 } from 'lucide-react';
 
 /* ── Fuzzy string matching (Levenshtein distance) ─────────────── */
@@ -26,14 +26,17 @@ function levenshtein(a, b) {
 
 function bestMatch(ocrName, productNames) {
     const normalized = ocrName.toLowerCase().trim();
+    if (!normalized || normalized.length < 2) return null;
+
     let best = null;
     let bestScore = Infinity;
 
     for (const name of productNames) {
         const normalizedProduct = name.toLowerCase().trim();
         const dist = levenshtein(normalized, normalizedProduct);
-        // Also check if the OCR name is contained in the product name or vice versa
-        const containsBonus = normalizedProduct.includes(normalized) || normalized.includes(normalizedProduct) ? -2 : 0;
+        // Bonus for substring containment
+        const containsBonus =
+            normalizedProduct.includes(normalized) || normalized.includes(normalizedProduct) ? -2 : 0;
         const score = dist + containsBonus;
         if (score < bestScore) {
             bestScore = score;
@@ -41,114 +44,138 @@ function bestMatch(ocrName, productNames) {
         }
     }
 
-    // Only accept matches with < 40% edit distance relative to the target
-    const threshold = Math.max(3, Math.floor((best?.length || 0) * 0.4));
+    // Accept matches with < 40% edit distance
+    const threshold = Math.max(3, Math.floor((best?.length || 0) * 0.45));
     return bestScore <= threshold ? best : null;
 }
 
-/* ── Parse OCR text into product/quantity pairs ───────────────── */
-function parseInventoryText(text) {
-    const results = [];
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-    // Strategy 1: Look for patterns like "123" above/before a product name
-    // FiveM inventory shows quantity as a small number on the item icon,
-    // and the product name below it
-    // Common OCR patterns:
-    //   "6.058"  -> 6058 (with dot as thousands separator)
-    //   "11.405" -> 11405
-    //   "430"    -> 430
-    //   repeated word patterns like "Schwamm" "Liquid Lumen" etc.
-
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-
-        // Try to find quantity-name pairs on the same line
-        // e.g., "160.999 Platine" or "430 Lunar Drop V"
-        const sameLineMatch = line.match(/^([\d.,]+)\s+(.+)$/);
-        if (sameLineMatch) {
-            const qty = parseGermanNumber(sameLineMatch[1]);
-            const name = sameLineMatch[2].trim();
-            if (qty > 0 && name.length > 1) {
-                results.push({ name, quantity: qty });
-                continue;
-            }
-        }
-
-        // Check if this line is just a number, and next line is a name
-        const numOnly = line.match(/^([\d.,]+)$/);
-        if (numOnly && i + 1 < lines.length) {
-            const qty = parseGermanNumber(numOnly[1]);
-            const nextLine = lines[i + 1].trim();
-            // Next line should not be a number
-            if (qty > 0 && nextLine && !/^[\d.,]+$/.test(nextLine)) {
-                results.push({ name: nextLine, quantity: qty });
-                i++; // skip the name line
-                continue;
-            }
-        }
-
-        // Check if this line is a name and previous result doesn't have a name match
-        // Or try number-before-name pattern: "37 Bohrer"
-        const inlineMatch = line.match(/^(\d+)\s+(.{2,})$/);
-        if (inlineMatch) {
-            const qty = parseInt(inlineMatch[1]);
-            const name = inlineMatch[2].trim();
-            if (qty > 0 && name.length > 1) {
-                results.push({ name, quantity: qty });
-            }
-        }
-    }
-
-    // Deduplicate by name (keep last occurrence)
-    const seen = new Map();
-    for (const item of results) {
-        seen.set(item.name.toLowerCase(), item);
-    }
-
-    return Array.from(seen.values());
-}
-
+/* ── Parse German-style number ("6.669" → 6669, "160.999" → 160999) ─── */
 function parseGermanNumber(str) {
-    // Handle German-style numbers: "6.058" -> 6058, "160.999" -> 160999
-    // Also handle "11,405" or plain "430"
-    const cleaned = str.replace(/\./g, '').replace(/,/g, '');
+    const cleaned = str.replace(/\./g, '').replace(/,/g, '').replace(/\s/g, '');
     const num = parseInt(cleaned);
     return isNaN(num) ? 0 : num;
 }
 
-/* ── Image preprocessing for better OCR ───────────────────────── */
-function preprocessImage(canvas, img) {
-    const ctx = canvas.getContext('2d');
-    canvas.width = img.naturalWidth || img.width;
-    canvas.height = img.naturalHeight || img.height;
+/* ══════════════════════════════════════════════════════════════════
+   Spatial Grid Parser – uses Tesseract word bounding boxes
+   to group words into item cells, then extract qty + name per cell
+   ══════════════════════════════════════════════════════════════════ */
+function parseWordsIntoItems(words) {
+    if (!words || words.length === 0) return [];
 
-    ctx.drawImage(img, 0, 0);
+    // Filter out very low confidence words and tiny words
+    const goodWords = words.filter(w =>
+        w.confidence > 30 && w.text.trim().length > 0
+    );
 
-    // Get image data
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
+    if (goodWords.length === 0) return [];
 
-    // Convert to grayscale and increase contrast
-    for (let i = 0; i < data.length; i += 4) {
-        // Grayscale
-        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    // Find grid structure by analyzing X positions (columns) and Y positions (rows).
+    // Each inventory cell has a number at the top and a name at the bottom.
+    // We cluster words by their center positions.
 
-        // Increase contrast (stretch histogram)
-        const contrast = 1.5;
-        const adjusted = ((gray / 255 - 0.5) * contrast + 0.5) * 255;
-        const clamped = Math.max(0, Math.min(255, adjusted));
+    const centers = goodWords.map(w => ({
+        word: w,
+        cx: (w.bbox.x0 + w.bbox.x1) / 2,
+        cy: (w.bbox.y0 + w.bbox.y1) / 2,
+        width: w.bbox.x1 - w.bbox.x0,
+        height: w.bbox.y1 - w.bbox.y0,
+    }));
 
-        // Threshold for cleaner text (white text on dark bg)
-        const final = clamped > 120 ? 255 : 0;
+    // Determine cell boundaries by finding clusters in X and Y.
+    // Use the overall image dimensions to estimate the grid.
+    const allX = centers.map(c => c.cx);
+    const allY = centers.map(c => c.cy);
+    const imgWidth = Math.max(...goodWords.map(w => w.bbox.x1));
+    const imgHeight = Math.max(...goodWords.map(w => w.bbox.y1));
 
-        data[i] = final;
-        data[i + 1] = final;
-        data[i + 2] = final;
+    // Estimate number of columns by clustering X positions
+    const numCols = estimateGridDivisions(allX, imgWidth);
+    const numRows = estimateGridDivisions(allY, imgHeight);
+
+    const cellWidth = imgWidth / numCols;
+    const cellHeight = imgHeight / numRows;
+
+    // Assign each word to a grid cell
+    const cells = new Map(); // "col,row" -> { numbers: [], texts: [] }
+
+    for (const c of centers) {
+        const col = Math.floor(c.cx / cellWidth);
+        const row = Math.floor(c.cy / cellHeight);
+        const key = `${col},${row}`;
+
+        if (!cells.has(key)) {
+            cells.set(key, { numbers: [], texts: [], col, row });
+        }
+
+        const cell = cells.get(key);
+        const text = c.word.text.trim();
+
+        // Check if this word is a number (possibly with dots for thousands)
+        if (/^[\d.,]+$/.test(text) && parseGermanNumber(text) > 0) {
+            cell.numbers.push({ text, cy: c.cy, confidence: c.word.confidence });
+        } else if (text.length >= 2 && !/^[^\w]+$/.test(text)) {
+            cell.texts.push({ text, cy: c.cy, confidence: c.word.confidence });
+        }
     }
 
-    ctx.putImageData(imageData, 0, 0);
-    return canvas;
+    // Build items from cells
+    const items = [];
+    for (const [, cell] of cells) {
+        if (cell.numbers.length === 0 && cell.texts.length === 0) continue;
+
+        // Pick the quantity: the topmost number in the cell (the badge)
+        const sortedNumbers = [...cell.numbers].sort((a, b) => a.cy - b.cy);
+        const quantity = sortedNumbers.length > 0
+            ? parseGermanNumber(sortedNumbers[0].text)
+            : null;
+
+        // Pick the name: concatenate text words sorted by Y then X position
+        const sortedTexts = [...cell.texts].sort((a, b) => a.cy - b.cy);
+        const name = sortedTexts.map(t => t.text).join(' ').trim();
+
+        if (quantity !== null && name) {
+            items.push({ name, quantity });
+        } else if (name && quantity === null) {
+            // A cell with only text, no number – could be a header or label
+            // Skip it
+        } else if (quantity !== null && !name) {
+            // Only a number, no text – might be a stray number
+            // Skip it
+        }
+    }
+
+    return items;
+}
+
+/** Estimate the number of grid divisions along one axis */
+function estimateGridDivisions(positions, totalSize) {
+    if (positions.length === 0) return 1;
+
+    // Sort positions and find natural gaps
+    const sorted = [...new Set(positions)].sort((a, b) => a - b);
+
+    // Use a simple approach: try common grid sizes (2-8 columns/rows)
+    // and pick the one where words cluster best
+    let bestDivs = 4; // default for FiveM inventory
+    let bestScore = Infinity;
+
+    for (let divs = 2; divs <= 8; divs++) {
+        const cellSize = totalSize / divs;
+        // For each position, measure distance to nearest cell center
+        let totalDist = 0;
+        for (const pos of sorted) {
+            const cellCenter = (Math.floor(pos / cellSize) + 0.5) * cellSize;
+            totalDist += Math.abs(pos - cellCenter);
+        }
+        const avgDist = totalDist / sorted.length;
+        if (avgDist < bestScore) {
+            bestScore = avgDist;
+            bestDivs = divs;
+        }
+    }
+
+    return bestDivs;
 }
 
 
@@ -167,7 +194,6 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
 
     const fileInputRef = useRef(null);
-    const canvasRef = useRef(null);
     const dropZoneRef = useRef(null);
 
     const productNames = warehouseItems.map(i => i.product_name);
@@ -232,43 +258,36 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         setScanResults(null);
 
         try {
-            // Lazy load Tesseract
             const Tesseract = await import('tesseract.js');
 
-            setProgressLabel('Bild wird vorverarbeitet...');
-            setProgress(10);
-
-            // Preprocess image
-            const img = new Image();
-            img.src = imagePreview;
-            await new Promise((resolve) => { img.onload = resolve; });
-
-            const canvas = canvasRef.current || document.createElement('canvas');
-            preprocessImage(canvas, img);
-            const processedDataUrl = canvas.toDataURL('image/png');
-
             setProgressLabel('Texterkennung läuft...');
-            setProgress(20);
+            setProgress(15);
 
-            // Run OCR
-            const result = await Tesseract.recognize(processedDataUrl, 'deu+eng', {
+            // Run OCR on the original image (no preprocessing — keep colors
+            // so Tesseract can use its own binarization which is smarter)
+            const result = await Tesseract.recognize(imagePreview, 'deu+eng', {
                 logger: (m) => {
                     if (m.status === 'recognizing text') {
-                        setProgress(20 + Math.round(m.progress * 70));
+                        setProgress(15 + Math.round(m.progress * 75));
                         setProgressLabel('Texterkennung läuft...');
                     }
                 }
             });
 
-            setProgress(90);
-            setProgressLabel('Ergebnisse werden analysiert...');
+            setProgress(92);
+            setProgressLabel('Wörter werden räumlich analysiert...');
 
             const ocrText = result.data.text;
-            console.log('OCR Raw Text:', ocrText);
+            const words = result.data.words;
 
-            // Parse the OCR text
-            const parsed = parseInventoryText(ocrText);
-            console.log('Parsed items:', parsed);
+            console.log('OCR raw text:', ocrText);
+            console.log('OCR words with bboxes:', words?.map(w => ({
+                text: w.text, bbox: w.bbox, conf: w.confidence
+            })));
+
+            // Use word-level spatial parsing instead of line-based parsing
+            const parsed = parseWordsIntoItems(words);
+            console.log('Spatially parsed items:', parsed);
 
             // Match against known products
             const matched = parsed.map(item => {
@@ -284,12 +303,14 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                     matchedItem: warehouseItem,
                     currentQuantity: warehouseItem?.quantity ?? null,
                     diff: warehouseItem ? item.quantity - warehouseItem.quantity : null,
-                    accepted: !!match, // pre-accept matched items
+                    accepted: !!match,
                 };
             });
 
-            // Also find warehouse items that weren't scanned
-            const matchedProductIds = new Set(matched.filter(m => m.matchedItem).map(m => m.matchedItem.product_id));
+            // Find warehouse items not matched
+            const matchedProductIds = new Set(
+                matched.filter(m => m.matchedItem).map(m => m.matchedItem.product_id)
+            );
             const unscanned = warehouseItems
                 .filter(wi => !matchedProductIds.has(wi.product_id))
                 .map(wi => ({
@@ -357,7 +378,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         setApplying(false);
     };
 
-    /* ── Toggle accept on a result row ────────────────────────── */
+    /* ── Toggle accept ────────────────────────────────────────── */
     const toggleAccept = (index) => {
         setScanResults(prev => {
             const newMatched = [...prev.matched];
@@ -426,7 +447,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                     </p>
                                 </div>
                                 <p className="text-xs text-muted-foreground/60">
-                                    PNG, JPG, WebP • Optimiert für 2560×1440
+                                    PNG, JPG, WebP • Am besten nur den Inventar-Bereich zuschneiden
                                 </p>
                             </div>
                             <input
@@ -454,6 +475,10 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                         Anderes Bild
                                     </Button>
                                 </div>
+                            </div>
+
+                            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm text-amber-200">
+                                <strong>Tipp:</strong> Für beste Ergebnisse nur den Inventar-Bereich (die Item-Karten) zuschneiden, ohne die Überschrift und Suchleiste.
                             </div>
 
                             {scanning ? (
@@ -508,7 +533,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                 )}
                             </div>
 
-                            {/* Small preview of uploaded image */}
+                            {/* Small preview */}
                             {imagePreview && (
                                 <div className="rounded-lg overflow-hidden border border-border/30 bg-secondary/20">
                                     <img src={imagePreview} alt="Screenshot" className="w-full max-h-32 object-contain opacity-60" />
@@ -581,7 +606,6 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                             </tr>
                                         ))}
 
-                                        {/* Unscanned warehouse items */}
                                         {scanResults.unscanned?.length > 0 && (
                                             <>
                                                 <tr>
@@ -665,7 +689,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                 </Button>
                             </div>
 
-                            {/* Debug: raw OCR text (collapsible) */}
+                            {/* Debug: raw OCR text */}
                             <details className="text-xs">
                                 <summary className="text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
                                     Roher OCR-Text anzeigen
@@ -677,9 +701,6 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                         </div>
                     )}
                 </div>
-
-                {/* Hidden canvas for image preprocessing */}
-                <canvas ref={canvasRef} className="hidden" />
             </div>
         </div>
     );
