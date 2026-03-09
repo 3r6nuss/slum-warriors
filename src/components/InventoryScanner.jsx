@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     X, Upload, ScanLine, Loader2, CheckCircle, AlertCircle,
-    ArrowRight, Save, RotateCcw, Grid3x3
+    ArrowRight, Save, RotateCcw, Grid3x3, Crop
 } from 'lucide-react';
 
 /* ── Fuzzy matching ───────────────────────────────────────────── */
@@ -44,35 +44,166 @@ function parseGermanNumber(str) {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   Per-cell OCR: crop each grid cell from the image and OCR it
-   individually, so numbers never get mixed between cells.
+   Auto-detect the right inventory panel from a full GTA screenshot.
+
+   The FiveM inventory has two dark-blue panels side by side.
+   We detect the blue UI region, find the vertical divider
+   between left/right panels, and crop the right panel's item grid
+   (skipping the header row with title + search bar).
    ══════════════════════════════════════════════════════════════════ */
 
-/** Crop a region from source canvas and return as data URL */
-function cropCell(sourceCanvas, x, y, w, h) {
+/** Check if a pixel is the characteristic FiveM inventory blue */
+function isInventoryBlue(r, g, b, a) {
+    // The inventory panels have a dark blue semi-transparent look.
+    // Typical values: R:15-80, G:25-100, B:80-200, with high alpha.
+    // We also accept slightly brighter blues for the card areas.
+    if (a < 100) return false; // too transparent
+    const blueRatio = b / (r + g + b + 1);
+    return blueRatio > 0.38 && b > 60 && r < 120 && g < 140;
+}
+
+/**
+ * Find the right inventory panel bounds from a full screenshot.
+ * Returns { x, y, width, height } of just the item grid area,
+ * or null if detection fails.
+ */
+function detectRightPanel(canvas) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    const data = ctx.getImageData(0, 0, W, H).data;
+
+    // Step 1: For every column, count how many pixels are "inventory blue"
+    const colBlueCounts = new Float32Array(W);
+    for (let x = 0; x < W; x++) {
+        let count = 0;
+        // Sample every 2nd pixel for speed
+        for (let y = 0; y < H; y += 2) {
+            const idx = (y * W + x) * 4;
+            if (isInventoryBlue(data[idx], data[idx + 1], data[idx + 2], data[idx + 3])) {
+                count++;
+            }
+        }
+        colBlueCounts[x] = count / (H / 2); // normalize to 0-1
+    }
+
+    // Step 2: Find the UI region (columns with >20% blue pixels)
+    const blueThreshold = 0.20;
+    let uiLeft = -1, uiRight = -1;
+    for (let x = 0; x < W; x++) {
+        if (colBlueCounts[x] > blueThreshold) {
+            if (uiLeft === -1) uiLeft = x;
+            uiRight = x;
+        }
+    }
+
+    if (uiLeft === -1 || uiRight - uiLeft < W * 0.2) {
+        console.log('Could not detect inventory UI region');
+        return null;
+    }
+
+    console.log(`Inventory UI detected: x=${uiLeft} to x=${uiRight} (${uiRight - uiLeft}px wide)`);
+
+    // Step 3: Find the vertical divider between left and right panels.
+    // The divider is in the middle ~40-60% of the UI region and has a
+    // brief dip in blue density (or a different shade).
+    const uiWidth = uiRight - uiLeft;
+    const searchStart = uiLeft + Math.floor(uiWidth * 0.35);
+    const searchEnd = uiLeft + Math.floor(uiWidth * 0.65);
+
+    let minBlue = Infinity, dividerX = uiLeft + Math.floor(uiWidth / 2);
+    // Use a sliding window to find the thinnest blue region (the gap/divider)
+    const windowSize = 5;
+    for (let x = searchStart; x < searchEnd - windowSize; x++) {
+        let sum = 0;
+        for (let dx = 0; dx < windowSize; dx++) sum += colBlueCounts[x + dx];
+        if (sum < minBlue) {
+            minBlue = sum;
+            dividerX = x + Math.floor(windowSize / 2);
+        }
+    }
+
+    console.log(`Panel divider at x=${dividerX}`);
+
+    // Step 4: The right panel starts just after the divider
+    const rightPanelX = dividerX + 5;
+    const rightPanelWidth = uiRight - rightPanelX;
+
+    if (rightPanelWidth < 100) {
+        console.log('Right panel too narrow');
+        return null;
+    }
+
+    // Step 5: Find the top and bottom of the right panel by scanning rows
+    // within the right panel's X range
+    const rowBlueCounts = new Float32Array(H);
+    for (let y = 0; y < H; y++) {
+        let count = 0;
+        for (let x = rightPanelX; x < uiRight; x += 2) {
+            const idx = (y * W + x) * 4;
+            if (isInventoryBlue(data[idx], data[idx + 1], data[idx + 2], data[idx + 3])) {
+                count++;
+            }
+        }
+        rowBlueCounts[y] = count / ((uiRight - rightPanelX) / 2);
+    }
+
+    let panelTop = -1, panelBottom = -1;
+    for (let y = 0; y < H; y++) {
+        if (rowBlueCounts[y] > blueThreshold) {
+            if (panelTop === -1) panelTop = y;
+            panelBottom = y;
+        }
+    }
+
+    if (panelTop === -1) {
+        console.log('Could not detect panel vertical bounds');
+        return null;
+    }
+
+    const panelHeight = panelBottom - panelTop;
+
+    // Step 6: Skip the header area (title + weight/search bar).
+    // The header is roughly the top 12-15% of the panel.
+    const headerSkip = Math.floor(panelHeight * 0.13);
+    const itemGridTop = panelTop + headerSkip;
+    const itemGridHeight = panelBottom - itemGridTop;
+
+    console.log(`Right panel: x=${rightPanelX}, y=${itemGridTop}, w=${rightPanelWidth}, h=${itemGridHeight}`);
+    console.log(`(skipped ${headerSkip}px header)`);
+
+    return {
+        x: rightPanelX,
+        y: itemGridTop,
+        width: rightPanelWidth,
+        height: itemGridHeight,
+    };
+}
+
+/* ── Crop helpers ─────────────────────────────────────────────── */
+function cropRegion(sourceCanvas, x, y, w, h) {
     const crop = document.createElement('canvas');
     crop.width = w;
     crop.height = h;
-    const ctx = crop.getContext('2d');
-    ctx.drawImage(sourceCanvas, x, y, w, h, 0, 0, w, h);
-    return crop.toDataURL('image/png');
+    crop.getContext('2d').drawImage(sourceCanvas, x, y, w, h, 0, 0, w, h);
+    return crop;
 }
 
-/** Parse OCR text from a single cell into quantity + name */
+function canvasToDataUrl(canvas) {
+    return canvas.toDataURL('image/png');
+}
+
+/* ── Parse OCR text from one cell ─────────────────────────────── */
 function parseCellText(text) {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     let quantity = null;
     let nameParts = [];
 
     for (const line of lines) {
-        // Is this line purely a number? (e.g. "160.999", "37", "6.669")
         if (/^[\d.,]+$/.test(line)) {
             const num = parseGermanNumber(line);
-            if (num > 0 && quantity === null) {
-                quantity = num;
-            }
+            if (num > 0 && quantity === null) quantity = num;
         } else {
-            // Check if the line starts with a number followed by text
             const numTextMatch = line.match(/^([\d.,]+)\s+(.+)$/);
             if (numTextMatch && quantity === null) {
                 const num = parseGermanNumber(numTextMatch[1]);
@@ -81,81 +212,62 @@ function parseCellText(text) {
                     const rest = numTextMatch[2].trim();
                     if (rest.length >= 2) nameParts.push(rest);
                 }
-            } else {
-                // Filter out garbage: must have at least one letter
-                if (/[a-zA-ZäöüÄÖÜß]/.test(line) && line.length >= 2) {
-                    nameParts.push(line);
-                }
+            } else if (/[a-zA-ZäöüÄÖÜß]/.test(line) && line.length >= 2) {
+                nameParts.push(line);
             }
         }
     }
 
-    const name = nameParts.join(' ').trim();
-    return { quantity, name: name || null };
+    return { quantity, name: nameParts.join(' ').trim() || null };
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   Pixel-based row detection: scan horizontal pixel strips to find
-   the gaps between card rows
-   ══════════════════════════════════════════════════════════════════ */
+/* ── Detect rows within the item grid ─────────────────────────── */
 function detectRows(canvas, numCols) {
     const ctx = canvas.getContext('2d');
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = canvas.width, h = canvas.height;
     const data = ctx.getImageData(0, 0, w, h).data;
 
-    // Compute average brightness per row of pixels
     const rowBrightness = [];
     for (let y = 0; y < h; y++) {
         let sum = 0;
-        for (let x = 0; x < w; x++) {
+        for (let x = 0; x < w; x += 2) {
             const idx = (y * w + x) * 4;
             sum += 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
         }
-        rowBrightness.push(sum / w);
+        rowBrightness.push(sum / (w / 2));
     }
 
-    // The items are bright-ish cards on a dark background.
-    // Row gaps should be consistently darker (lower brightness) strips.
-    const avgBrightness = rowBrightness.reduce((a, b) => a + b, 0) / h;
+    const avgB = rowBrightness.reduce((a, b) => a + b, 0) / h;
+    const darkThreshold = avgB * 0.65;
 
-    // Find continuous dark bands (darker than average) as row separators
-    const darkThreshold = avgBrightness * 0.6;
-    const gaps = []; // [startY, endY]
+    const gaps = [];
     let inGap = false, gapStart = 0;
-
     for (let y = 0; y < h; y++) {
         if (rowBrightness[y] < darkThreshold) {
             if (!inGap) { inGap = true; gapStart = y; }
         } else {
             if (inGap) {
-                const gapSize = y - gapStart;
-                // Only consider gaps wider than 3px
-                if (gapSize > 3) gaps.push([gapStart, y]);
+                if (y - gapStart > 3) gaps.push([gapStart, y]);
                 inGap = false;
             }
         }
     }
 
-    // Convert gaps to row boundaries
     const rows = [];
     let prevEnd = 0;
     for (const [gStart, gEnd] of gaps) {
-        if (gStart - prevEnd > 30) { // minimum row height
-            rows.push([prevEnd, gStart]);
-        }
+        if (gStart - prevEnd > 30) rows.push([prevEnd, gStart]);
         prevEnd = gEnd;
     }
     if (h - prevEnd > 30) rows.push([prevEnd, h]);
 
-    // Fallback: if detection failed, estimate from item count
+    // Fallback
     if (rows.length === 0) {
-        const estimatedRowHeight = w / numCols; // cards are roughly square-ish
-        const numRows = Math.max(1, Math.round(h / estimatedRowHeight));
-        const cellH = Math.floor(h / numRows);
-        for (let r = 0; r < numRows; r++) {
-            rows.push([r * cellH, Math.min((r + 1) * cellH, h)]);
-        }
+        const cellH = Math.floor(w / numCols);
+        const numRows = Math.max(1, Math.round(h / cellH));
+        const rH = Math.floor(h / numRows);
+        for (let r = 0; r < numRows; r++)
+            rows.push([r * rH, Math.min((r + 1) * rH, h)]);
     }
 
     return rows;
@@ -168,6 +280,7 @@ function detectRows(canvas, numCols) {
 export default function InventoryScanner({ warehouseItems, warehouseId, user, onClose }) {
     const [image, setImage] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
+    const [croppedPreview, setCroppedPreview] = useState(null);
     const [scanning, setScanning] = useState(false);
     const [progress, setProgress] = useState(0);
     const [progressLabel, setProgressLabel] = useState('');
@@ -175,7 +288,8 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     const [applying, setApplying] = useState(false);
     const [applyStatus, setApplyStatus] = useState(null);
     const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
-    const [numCols, setNumCols] = useState(4); // FiveM inventory is typically 4 columns
+    const [numCols, setNumCols] = useState(4);
+    const [detectionInfo, setDetectionInfo] = useState(null);
 
     const fileInputRef = useRef(null);
     const dropZoneRef = useRef(null);
@@ -188,6 +302,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         setImage(file);
         setScanResults(null);
         setApplyStatus(null);
+        setCroppedPreview(null);
+        setDetectionInfo(null);
+
         const reader = new FileReader();
         reader.onload = (e) => setImagePreview(e.target.result);
         reader.readAsDataURL(file);
@@ -223,100 +340,109 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         return () => window.removeEventListener('paste', handlePaste);
     }, [handleFile]);
 
-    /* ── Run per-cell OCR scan ────────────────────────────────── */
+    /* ── Run scan ─────────────────────────────────────────────── */
     const runScan = async () => {
         if (!image) return;
         setScanning(true);
         setProgress(0);
         setProgressLabel('Lade Tesseract.js...');
         setScanResults(null);
+        setCroppedPreview(null);
 
         try {
             const Tesseract = await import('tesseract.js');
 
             setProgressLabel('Bild wird analysiert...');
-            setProgress(5);
+            setProgress(3);
 
-            // Load the image onto a canvas
+            // Load image onto canvas
             const img = new Image();
             img.src = imagePreview;
             await new Promise((resolve) => { img.onload = resolve; });
 
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
+            const fullCanvas = document.createElement('canvas');
+            fullCanvas.width = img.naturalWidth;
+            fullCanvas.height = img.naturalHeight;
+            fullCanvas.getContext('2d').drawImage(img, 0, 0);
 
-            // Detect rows using pixel analysis
-            const rows = detectRows(canvas, numCols);
-            const cellWidth = Math.floor(canvas.width / numCols);
+            setProgressLabel('Rechtes Inventarfeld wird gesucht...');
+            setProgress(5);
+
+            // Auto-detect the right panel
+            const panel = detectRightPanel(fullCanvas);
+
+            let gridCanvas;
+            if (panel) {
+                // Successfully detected → crop to item grid
+                gridCanvas = cropRegion(fullCanvas, panel.x, panel.y, panel.width, panel.height);
+                setCroppedPreview(canvasToDataUrl(gridCanvas));
+                setDetectionInfo(`Rechtes Panel erkannt: ${panel.width}×${panel.height}px (ab x=${panel.x})`);
+            } else {
+                // Fallback: use the entire image (user may have already cropped)
+                gridCanvas = fullCanvas;
+                setDetectionInfo('Kein Panel erkannt – scanne gesamtes Bild');
+            }
+
+            setProgressLabel('Grid wird aufgeteilt...');
+            setProgress(8);
+
+            // Detect rows and split into cells
+            const rows = detectRows(gridCanvas, numCols);
+            const cellWidth = Math.floor(gridCanvas.width / numCols);
 
             console.log(`Grid: ${numCols} cols × ${rows.length} rows`);
-            console.log('Row boundaries:', rows);
 
-            // Build list of cell crops
             const cells = [];
             for (let r = 0; r < rows.length; r++) {
                 const [y1, y2] = rows[r];
                 for (let c = 0; c < numCols; c++) {
-                    const x = c * cellWidth;
-                    const w = cellWidth;
-                    const h = y2 - y1;
                     cells.push({
                         row: r, col: c,
-                        dataUrl: cropCell(canvas, x, y1, w, h),
+                        dataUrl: canvasToDataUrl(
+                            cropRegion(gridCanvas, c * cellWidth, y1, cellWidth, y2 - y1)
+                        ),
                     });
                 }
             }
 
-            setProgressLabel(`${cells.length} Zellen erkannt, scanne...`);
+            setProgressLabel(`${cells.length} Zellen gefunden, scanne...`);
             setProgress(10);
 
-            // OCR each cell individually
+            // OCR each cell
             const parsed = [];
             for (let i = 0; i < cells.length; i++) {
                 const cell = cells[i];
-                const pct = 10 + Math.round((i / cells.length) * 80);
-                setProgress(pct);
-                setProgressLabel(`Zelle ${i + 1}/${cells.length} wird gescannt...`);
+                setProgress(10 + Math.round((i / cells.length) * 80));
+                setProgressLabel(`Zelle ${i + 1}/${cells.length}...`);
 
                 try {
                     const result = await Tesseract.recognize(cell.dataUrl, 'deu+eng');
-                    const cellText = result.data.text;
-                    const { quantity, name } = parseCellText(cellText);
-
-                    console.log(`Cell [${cell.row},${cell.col}]: "${cellText.trim()}" → qty=${quantity}, name="${name}"`);
-
+                    const { quantity, name } = parseCellText(result.data.text);
+                    console.log(`[${cell.row},${cell.col}] "${result.data.text.trim()}" → qty=${quantity} name="${name}"`);
                     if (quantity !== null && name) {
                         parsed.push({ name, quantity, row: cell.row, col: cell.col });
                     }
                 } catch (err) {
-                    console.warn(`Cell [${cell.row},${cell.col}] OCR failed:`, err);
+                    console.warn(`Cell [${cell.row},${cell.col}] failed:`, err);
                 }
             }
 
             setProgress(92);
-            setProgressLabel('Ergebnisse werden abgeglichen...');
+            setProgressLabel('Abgleich...');
 
-            // Match against known products
+            // Match
             const matched = parsed.map(item => {
                 const match = bestMatch(item.name, productNames);
-                const warehouseItem = match
-                    ? warehouseItems.find(wi => wi.product_name === match)
-                    : null;
+                const wi = match ? warehouseItems.find(w => w.product_name === match) : null;
                 return {
-                    ocrName: item.name,
-                    ocrQuantity: item.quantity,
-                    matchedName: match,
-                    matchedItem: warehouseItem,
-                    currentQuantity: warehouseItem?.quantity ?? null,
-                    diff: warehouseItem ? item.quantity - warehouseItem.quantity : null,
+                    ocrName: item.name, ocrQuantity: item.quantity,
+                    matchedName: match, matchedItem: wi,
+                    currentQuantity: wi?.quantity ?? null,
+                    diff: wi ? item.quantity - wi.quantity : null,
                     accepted: !!match,
                 };
             });
 
-            // Find unscanned warehouse items
             const matchedIds = new Set(matched.filter(m => m.matchedItem).map(m => m.matchedItem.product_id));
             const unscanned = warehouseItems
                 .filter(wi => !matchedIds.has(wi.product_id))
@@ -340,38 +466,29 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         setScanning(false);
     };
 
-    /* ── Apply results ────────────────────────────────────────── */
+    /* ── Apply ────────────────────────────────────────────────── */
     const applyResults = async () => {
         if (!scanResults?.matched || !personName) return;
         const changes = scanResults.matched
             .filter(r => r.accepted && r.matchedItem && r.diff !== 0 && r.diff !== null)
             .map(r => ({ product_id: r.matchedItem.product_id, new_quantity: r.ocrQuantity }));
-
         if (changes.length === 0) {
-            setApplyStatus({ type: 'error', message: 'Keine Änderungen zum Übernehmen.' });
-            return;
+            setApplyStatus({ type: 'error', message: 'Keine Änderungen zum Übernehmen.' }); return;
         }
         setApplying(true); setApplyStatus(null);
         try {
             const res = await fetch('/api/adjustments/batch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    warehouse_id: parseInt(warehouseId),
-                    person_name: personName,
-                    reason: 'Inventar-Scanner Abgleich',
-                    changes,
+                    warehouse_id: parseInt(warehouseId), person_name: personName,
+                    reason: 'Inventar-Scanner Abgleich', changes,
                 }),
             });
             const data = await res.json();
-            if (res.ok) {
-                setApplyStatus({ type: 'success', message: `${changes.length} Produkt(e) aktualisiert!` });
-            } else {
-                setApplyStatus({ type: 'error', message: data.error || 'Fehler beim Speichern.' });
-            }
-        } catch {
-            setApplyStatus({ type: 'error', message: 'Verbindungsfehler.' });
-        }
+            setApplyStatus(res.ok
+                ? { type: 'success', message: `${changes.length} Produkt(e) aktualisiert!` }
+                : { type: 'error', message: data.error || 'Fehler.' });
+        } catch { setApplyStatus({ type: 'error', message: 'Verbindungsfehler.' }); }
         setApplying(false);
     };
 
@@ -384,8 +501,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     };
 
     const reset = () => {
-        setImage(null); setImagePreview(null);
+        setImage(null); setImagePreview(null); setCroppedPreview(null);
         setScanResults(null); setApplyStatus(null); setProgress(0);
+        setDetectionInfo(null);
     };
 
     const acceptedChanges = scanResults?.matched?.filter(r => r.accepted && r.diff !== 0 && r.diff !== null) || [];
@@ -407,7 +525,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                         <div>
                             <h3 className="text-lg font-bold">Inventar Scanner</h3>
                             <p className="text-sm text-muted-foreground">
-                                Screenshot hochladen → Zelle für Zelle scannen
+                                Ganzen Screenshot reinwerfen – rechtes Panel wird automatisch erkannt
                             </p>
                         </div>
                     </div>
@@ -434,14 +552,15 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                     <Upload className="h-8 w-8 text-muted-foreground" />
                                 </div>
                                 <div>
-                                    <p className="font-semibold text-lg">Screenshot hier ablegen</p>
+                                    <p className="font-semibold text-lg">GTA Screenshot reinwerfen</p>
                                     <p className="text-sm text-muted-foreground mt-1">
-                                        oder klicken zum Auswählen • <kbd className="px-1.5 py-0.5 rounded bg-secondary text-xs font-mono">Strg+V</kbd> zum Einfügen
+                                        Kompletter Screenshot • <kbd className="px-1.5 py-0.5 rounded bg-secondary text-xs font-mono">Strg+V</kbd> oder Drag & Drop
                                     </p>
                                 </div>
-                                <p className="text-xs text-muted-foreground/60">
-                                    Am besten nur die Item-Karten zuschneiden (ohne Header)
-                                </p>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
+                                    <Crop className="h-3.5 w-3.5" />
+                                    Rechtes Inventar-Panel wird automatisch erkannt
+                                </div>
                             </div>
                             <input
                                 ref={fileInputRef}
@@ -453,11 +572,11 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                         </div>
                     )}
 
-                    {/* Preview + Settings + Scan */}
+                    {/* Preview + Settings */}
                     {imagePreview && !scanResults && (
                         <div className="space-y-4">
                             <div className="relative rounded-xl overflow-hidden border border-border/50 bg-secondary/30">
-                                <img src={imagePreview} alt="Screenshot" className="w-full max-h-64 object-contain" />
+                                <img src={imagePreview} alt="Screenshot" className="w-full max-h-48 object-contain" />
                                 <div className="absolute top-3 right-3">
                                     <Button variant="secondary" size="sm" onClick={reset}>
                                         <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
@@ -470,7 +589,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                             <div className="flex items-center gap-4 p-3 rounded-lg bg-secondary/30 border border-border/30">
                                 <Grid3x3 className="h-5 w-5 text-muted-foreground shrink-0" />
                                 <div className="flex items-center gap-3 flex-1">
-                                    <Label htmlFor="numCols" className="text-sm whitespace-nowrap">Spalten im Inventar:</Label>
+                                    <Label className="text-sm whitespace-nowrap">Spalten:</Label>
                                     <div className="flex items-center gap-2">
                                         {[3, 4, 5, 6].map(n => (
                                             <button
@@ -486,10 +605,6 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                         ))}
                                     </div>
                                 </div>
-                            </div>
-
-                            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm text-amber-200">
-                                <strong>Tipp:</strong> Schneide den Screenshot so zu, dass nur die Item-Karten sichtbar sind (ohne den "Hauslager"-Header und die Suchleiste). Zähle die Spalten und stelle sie oben ein.
                             </div>
 
                             {scanning ? (
@@ -509,7 +624,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                             ) : (
                                 <Button onClick={runScan} className="w-full" size="lg">
                                     <ScanLine className="h-5 w-5 mr-2" />
-                                    Jetzt scannen ({numCols} Spalten)
+                                    Jetzt scannen
                                 </Button>
                             )}
                         </div>
@@ -529,7 +644,14 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                     {/* Results */}
                     {scanResults?.matched && (
                         <div className="space-y-4">
+                            {/* Info badges */}
                             <div className="flex gap-3 flex-wrap items-center">
+                                {detectionInfo && (
+                                    <Badge variant="outline" className="text-sm py-1 px-3">
+                                        <Crop className="h-3 w-3 mr-1.5" />
+                                        {detectionInfo}
+                                    </Badge>
+                                )}
                                 <Badge variant="outline" className="text-sm py-1 px-3">
                                     <Grid3x3 className="h-3 w-3 mr-1.5" />
                                     {scanResults.gridInfo}
@@ -544,10 +666,16 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                 )}
                             </div>
 
-                            {imagePreview && (
-                                <div className="rounded-lg overflow-hidden border border-border/30 bg-secondary/20">
-                                    <img src={imagePreview} alt="" className="w-full max-h-32 object-contain opacity-60" />
-                                </div>
+                            {/* Cropped preview – show what was auto-detected */}
+                            {croppedPreview && (
+                                <details className="rounded-lg border border-border/30 overflow-hidden">
+                                    <summary className="p-3 cursor-pointer text-sm text-muted-foreground hover:text-foreground bg-secondary/20 transition-colors">
+                                        Erkannter Inventar-Bereich anzeigen
+                                    </summary>
+                                    <div className="border-t border-border/30 bg-secondary/10">
+                                        <img src={croppedPreview} alt="Erkannter Bereich" className="w-full max-h-48 object-contain" />
+                                    </div>
+                                </details>
                             )}
 
                             {/* Results table */}
@@ -577,8 +705,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                                 <td className="p-3">
                                                     {row.matchedItem && (
                                                         <div className={`h-5 w-5 rounded border-2 flex items-center justify-center transition-colors ${row.accepted
-                                                            ? 'bg-success border-success text-success-foreground'
-                                                            : 'border-border'
+                                                            ? 'bg-success border-success text-success-foreground' : 'border-border'
                                                             }`}>
                                                             {row.accepted && <CheckCircle className="h-3.5 w-3.5" />}
                                                         </div>
@@ -590,11 +717,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                                     </span>
                                                 </td>
                                                 <td className="p-3">
-                                                    {row.matchedName ? (
-                                                        <span className="font-medium text-success">{row.matchedName}</span>
-                                                    ) : (
-                                                        <span className="text-muted-foreground italic">—</span>
-                                                    )}
+                                                    {row.matchedName
+                                                        ? <span className="font-medium text-success">{row.matchedName}</span>
+                                                        : <span className="text-muted-foreground italic">—</span>}
                                                 </td>
                                                 <td className="p-3 text-right font-mono font-semibold">
                                                     {row.ocrQuantity?.toLocaleString('de-DE')}
@@ -606,8 +731,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                                     {row.diff !== null ? (
                                                         <span className={
                                                             row.diff > 0 ? 'text-success' :
-                                                                row.diff < 0 ? 'text-destructive' :
-                                                                    'text-muted-foreground'
+                                                                row.diff < 0 ? 'text-destructive' : 'text-muted-foreground'
                                                         }>
                                                             {row.diff > 0 && '+'}{row.diff.toLocaleString('de-DE')}
                                                         </span>
@@ -666,11 +790,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                         </div>
                                     )}
                                     <Button onClick={applyResults} disabled={applying || !personName || applyStatus?.type === 'success'} className="w-full">
-                                        {applying ? (
-                                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Wird übernommen...</>
-                                        ) : (
-                                            <><Save className="h-4 w-4 mr-2" />Bestände aktualisieren</>
-                                        )}
+                                        {applying
+                                            ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Wird übernommen...</>
+                                            : <><Save className="h-4 w-4 mr-2" />Bestände aktualisieren</>}
                                     </Button>
                                 </div>
                             )}
