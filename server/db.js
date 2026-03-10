@@ -136,6 +136,11 @@ if (!productCols.find(c => c.name === 'sort_order')) {
   db.exec(`ALTER TABLE products ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`);
 }
 
+// Migration: Add 'is_stackable' column to products table if missing
+if (!productCols.find(c => c.name === 'is_stackable')) {
+  db.exec(`ALTER TABLE products ADD COLUMN is_stackable INTEGER NOT NULL DEFAULT 1`);
+}
+
 // Migration: Add 'sort_order' column to inventory table if missing
 const inventoryCols = db.prepare("PRAGMA table_info(inventory)").all();
 if (!inventoryCols.find(c => c.name === 'sort_order')) {

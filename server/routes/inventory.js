@@ -20,6 +20,7 @@ router.get('/:warehouseId', (req, res) => {
       w.type as warehouse_type,
       i.product_id,
       p.name as product_name,
+      p.is_stackable,
       i.quantity
     FROM inventory i
     JOIN warehouses w ON i.warehouse_id = w.id

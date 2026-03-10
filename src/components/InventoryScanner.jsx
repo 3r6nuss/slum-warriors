@@ -5,8 +5,25 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     X, Upload, ScanLine, Loader2, CheckCircle, AlertCircle,
-    ArrowRight, Save, RotateCcw, Grid3x3, Move, Plus, Crop
+    ArrowRight, Save, RotateCcw, Grid3x3, Move, Plus, Crop, Layers
 } from 'lucide-react';
+
+const STORAGE_KEY = 'scanner_grid_settings';
+const DEFAULT_GRID = { x: 52, y: 18, w: 44, h: 74 };
+const DEFAULT_COLS = 4;
+const DEFAULT_ROWS = 3;
+
+function loadSavedGrid() {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return null;
+}
+
+function saveGrid(gridPos, numCols, numRows) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ gridPos, numCols, numRows }));
+}
 
 /* ── Fuzzy matching ───────────────────────────────────────────── */
 function levenshtein(a, b) {
@@ -85,10 +102,12 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     const [imagePreview, setImagePreview] = useState(null);
     const [imgNaturalSize, setImgNaturalSize] = useState(null); // { w, h }
 
-    // Grid overlay state (in % of image)
-    const [gridPos, setGridPos] = useState({ x: 52, y: 18, w: 44, h: 74 });
-    const [numCols, setNumCols] = useState(4);
-    const [numRows, setNumRows] = useState(3);
+    // Grid overlay state (in % of image) – load from localStorage
+    const savedGrid = loadSavedGrid();
+    const [gridPos, setGridPos] = useState(savedGrid?.gridPos || { ...DEFAULT_GRID });
+    const [numCols, setNumCols] = useState(savedGrid?.numCols || DEFAULT_COLS);
+    const [numRows, setNumRows] = useState(savedGrid?.numRows || DEFAULT_ROWS);
+    const [gridSaved, setGridSaved] = useState(false);
 
     // Scan state
     const [scanning, setScanning] = useState(false);
@@ -274,6 +293,15 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                             name = nameText.replace(/\n/g, ' ').trim();
                         }
                     } catch { /* skip */ }
+
+                    // For non-stackable items: if name matches a non-stackable product, set qty=1
+                    if (name && quantity === null) {
+                        const match = bestMatch(name, productNames);
+                        const wi = match ? warehouseItems.find(w => w.product_name === match) : null;
+                        if (wi && !wi.is_stackable) {
+                            quantity = 1;
+                        }
+                    }
 
                     console.log(`Cell [${row},${col}]: qty=${quantity}, name="${name}"`);
 
@@ -476,7 +504,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                     {imagePreview && (
                         <div className="space-y-3">
                             {/* Grid settings bar */}
-                            <div className="flex items-center gap-4 p-2.5 rounded-lg bg-secondary/30 border border-border/30 flex-wrap">
+                            <div className="flex items-center gap-3 p-2.5 rounded-lg bg-secondary/30 border border-border/30 flex-wrap">
                                 <div className="flex items-center gap-2">
                                     <Grid3x3 className="h-4 w-4 text-muted-foreground" />
                                     <Label className="text-xs whitespace-nowrap">Spalten:</Label>
@@ -498,10 +526,48 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                         </button>
                                     ))}
                                 </div>
-                                <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-                                    <Move className="h-3.5 w-3.5" />
-                                    Grid ziehen zum Positionieren
+                                <div className="ml-auto flex items-center gap-1.5">
+                                    <Button
+                                        variant="outline" size="sm"
+                                        className="h-7 text-xs gap-1"
+                                        onClick={() => { saveGrid(gridPos, numCols, numRows); setGridSaved(true); setTimeout(() => setGridSaved(false), 2000); }}
+                                    >
+                                        <Save className="h-3 w-3" />
+                                        {gridSaved ? 'Gespeichert!' : 'Speichern'}
+                                    </Button>
+                                    <Button
+                                        variant="ghost" size="sm"
+                                        className="h-7 text-xs gap-1 text-muted-foreground"
+                                        onClick={() => { setGridPos({ ...DEFAULT_GRID }); setNumCols(DEFAULT_COLS); setNumRows(DEFAULT_ROWS); localStorage.removeItem(STORAGE_KEY); }}
+                                    >
+                                        <RotateCcw className="h-3 w-3" />
+                                        Reset
+                                    </Button>
                                 </div>
+                            </div>
+
+                            {/* Numeric fine-tuning */}
+                            <div className="flex items-center gap-3 px-2.5 flex-wrap">
+                                {[
+                                    { key: 'x', label: 'X%' },
+                                    { key: 'y', label: 'Y%' },
+                                    { key: 'w', label: 'W%' },
+                                    { key: 'h', label: 'H%' },
+                                ].map(({ key, label }) => (
+                                    <div key={key} className="flex items-center gap-1">
+                                        <Label className="text-[10px] text-muted-foreground font-mono w-5">{label}</Label>
+                                        <Input
+                                            type="number"
+                                            min="0" max="100" step="1"
+                                            value={Math.round(gridPos[key])}
+                                            onChange={(e) => {
+                                                const val = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0));
+                                                setGridPos(prev => ({ ...prev, [key]: val }));
+                                            }}
+                                            className="h-7 w-16 text-xs font-mono text-center bg-secondary/50 border-border/30"
+                                        />
+                                    </div>
+                                ))}
                             </div>
 
                             {/* Image container with overlay */}

@@ -11,7 +11,8 @@ import {
     ShieldCheck, Users, ScrollText, Crown, Shield, User, Eye,
     CheckCircle, AlertCircle, Swords, Clock, UserCheck, UserX,
     Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi,
-    Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Send, Loader2
+    Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Send, Loader2,
+    GripVertical, Layers
 } from 'lucide-react';
 
 const HARDCODED_IDS = [
@@ -881,6 +882,7 @@ function ProductManagement() {
     const [warehouses, setWarehouses] = useState([]);
     const [selectedWarehouses, setSelectedWarehouses] = useState([]);
     const [newName, setNewName] = useState('');
+    const [newStackable, setNewStackable] = useState(true);
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState(null);
@@ -899,7 +901,6 @@ function ProductManagement() {
                 const whData = await whRes.json();
                 const invData = await invRes.json();
 
-                // Map product ID to assigned warehouse IDs
                 const assignments = {};
                 prodData.forEach(p => { assignments[p.id] = []; });
                 invData.forEach(i => {
@@ -910,7 +911,6 @@ function ProductManagement() {
                     }
                 });
 
-                // Attach warehouseIds to products for the UI
                 const productsWithWarehouses = prodData.map(p => ({
                     ...p,
                     warehouseIds: assignments[p.id] || []
@@ -918,7 +918,6 @@ function ProductManagement() {
 
                 setProducts(productsWithWarehouses);
                 setWarehouses(whData);
-                // Default to all warehouses selected
                 setSelectedWarehouses(whData.map(w => w.id));
             }
         } catch (err) {
@@ -950,14 +949,16 @@ function ProductManagement() {
                 credentials: 'include',
                 body: JSON.stringify({
                     name: newName.trim(),
-                    warehouseIds: selectedWarehouses
+                    warehouseIds: selectedWarehouses,
+                    is_stackable: newStackable,
                 }),
             });
             const data = await res.json();
             if (res.ok) {
                 setStatus({ type: 'success', message: `"${data.name}" wurde hinzugefügt` });
                 setNewName('');
-                loadData(); // Reload to get updated products list
+                setNewStackable(true);
+                loadData();
             } else {
                 setStatus({ type: 'error', message: data.error });
             }
@@ -1024,15 +1025,11 @@ function ProductManagement() {
         ) return;
 
         const newProducts = [...products];
-        // Swap items
         const temp = newProducts[index];
         newProducts[index] = newProducts[index + direction];
         newProducts[index + direction] = temp;
 
-        // Setup new order payload
         const orderPayload = newProducts.map((p, i) => ({ id: p.id, sort_order: i }));
-
-        // Optimistic UI update
         setProducts(newProducts);
 
         try {
@@ -1045,7 +1042,7 @@ function ProductManagement() {
             if (!res.ok) throw new Error('Failed to save order');
         } catch (err) {
             setStatus({ type: 'error', message: 'Fehler beim Speichern der Sortierung' });
-            loadData(); // Revert on failure
+            loadData();
         }
     };
 
@@ -1054,13 +1051,11 @@ function ProductManagement() {
             ? currentWarehouseIds.filter(id => id !== warehouseId)
             : [...currentWarehouseIds, warehouseId];
 
-        // Prevent removing a product from ALL warehouses (must be in at least one)
         if (newWarehouseIds.length === 0) {
             setStatus({ type: 'error', message: 'Ein Produkt muss mindestens einem Lager zugewiesen sein.' });
             return;
         }
 
-        // Optimistic UI update
         setProducts(products.map(p => p.id === productId ? { ...p, warehouseIds: newWarehouseIds } : p));
 
         try {
@@ -1077,9 +1072,30 @@ function ProductManagement() {
             }
         } catch (err) {
             setStatus({ type: 'error', message: err.message });
-            loadData(); // Revert on failure
+            loadData();
         }
     };
+
+    const toggleStackable = async (productId, currentValue) => {
+        const newValue = !currentValue;
+        // Optimistic update
+        setProducts(products.map(p => p.id === productId ? { ...p, is_stackable: newValue ? 1 : 0 } : p));
+
+        try {
+            const res = await fetch(`/api/products/${productId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ is_stackable: newValue })
+            });
+            if (!res.ok) throw new Error('Fehler beim Speichern');
+        } catch (err) {
+            setStatus({ type: 'error', message: err.message });
+            loadData();
+        }
+    };
+
+    if (loading) return <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></div>;
 
     return (
         <Card className="backdrop-blur-sm bg-card/80 border-border/50">
@@ -1090,159 +1106,180 @@ function ProductManagement() {
                 </CardTitle>
                 <CardDescription>{products.length} Produkte registriert</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
                 {status && (
-                    <div className={`mb-4 flex items-center gap-2 p-3 rounded-lg ${status.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
-                        {status.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-                        <span className="text-sm">{status.message}</span>
+                    <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${status.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                        {status.type === 'success' ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
+                        {status.message}
+                        <button onClick={() => setStatus(null)} className="ml-auto text-current opacity-60 hover:opacity-100">
+                            <X className="h-3.5 w-3.5" />
+                        </button>
                     </div>
                 )}
 
-                {/* Add new product */}
-                <div className="flex flex-col gap-3 mb-6 bg-muted/30 p-4 rounded-xl border">
-                    <div className="flex flex-wrap gap-2">
-                        {warehouses.map(w => (
-                            <Button
-                                key={w.id}
-                                size="sm"
-                                variant={selectedWarehouses.includes(w.id) ? 'default' : 'outline'}
-                                onClick={() => toggleWarehouse(w.id)}
-                                className={`text-xs h-8 ${selectedWarehouses.includes(w.id) ? 'bg-primary/20 text-primary hover:bg-primary/30' : ''}`}
-                            >
-                                {selectedWarehouses.includes(w.id) ? <Check className="h-3.5 w-3.5 mr-1" /> : null}
-                                {w.name}
-                            </Button>
-                        ))}
+                {/* ── Add new product ── */}
+                <div className="p-4 rounded-xl border border-border/50 bg-muted/20 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                        <Plus className="h-4 w-4" />
+                        Neues Produkt
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
                         <Input
                             value={newName}
                             onChange={(e) => setNewName(e.target.value)}
-                            placeholder="Neues Produkt hinzufügen..."
-                            className="flex-1 bg-background"
+                            placeholder="Produktname..."
+                            className="flex-1 min-w-[180px] bg-background h-9"
                             onKeyDown={(e) => { if (e.key === 'Enter') addProduct(); }}
                         />
-                        <Button onClick={addProduct} disabled={!newName.trim() || selectedWarehouses.length === 0} className="gap-1.5 min-w-[120px]">
-                            <Plus className="h-4 w-4" />
+                        <div className="flex items-center gap-1.5">
+                            {warehouses.map(w => (
+                                <button
+                                    key={w.id}
+                                    onClick={() => toggleWarehouse(w.id)}
+                                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border ${selectedWarehouses.includes(w.id)
+                                            ? w.type === 'leadership'
+                                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                                : 'bg-primary/15 text-primary border-primary/30'
+                                            : 'bg-transparent text-muted-foreground border-border/50 opacity-50 hover:opacity-80'
+                                        }`}
+                                >
+                                    {w.name}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setNewStackable(!newStackable)}
+                                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                title={newStackable ? 'Stackable (Mengenangabe)' : 'Non-stackable (immer 1x)'}
+                            >
+                                <Layers className={`h-3.5 w-3.5 ${newStackable ? 'text-primary' : 'text-muted-foreground/50'}`} />
+                                <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${newStackable ? 'bg-primary' : 'bg-input'}`}>
+                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-background transition-transform ${newStackable ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                                </span>
+                            </button>
+                        </div>
+                        <Button onClick={addProduct} disabled={!newName.trim() || selectedWarehouses.length === 0} size="sm" className="gap-1.5">
+                            <Plus className="h-3.5 w-3.5" />
                             Hinzufügen
                         </Button>
                     </div>
                 </div>
 
-                {/* Product list */}
-                <div className="rounded-md border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-24">Sortierung</TableHead>
-                                <TableHead>ID</TableHead>
-                                <TableHead>Produktname</TableHead>
-                                <TableHead>Lager-Zuweisung</TableHead>
-                                <TableHead className="text-right">Aktionen</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {products.map((p, index) => (
-                                <TableRow key={p.id}>
-                                    <TableCell>
-                                        <div className="flex gap-1">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-6 w-6"
-                                                disabled={index === 0}
-                                                onClick={() => moveProduct(index, -1)}
-                                            >
-                                                <ArrowUp className="h-4 w-4" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="h-6 w-6"
-                                                disabled={index === products.length - 1}
-                                                onClick={() => moveProduct(index, 1)}
-                                            >
-                                                <ArrowDown className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="font-mono text-xs text-muted-foreground w-16">
-                                        {p.id}
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                        {editingProduct?.id === p.id ? (
-                                            <div className="flex items-center gap-1.5">
-                                                <Input
-                                                    value={editingProduct.name}
-                                                    onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                                                    className="h-8 w-48 text-sm"
-                                                    autoFocus
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') renameProduct(p.id, p.name);
-                                                        if (e.key === 'Escape') setEditingProduct(null);
-                                                    }}
-                                                />
-                                                <Button size="icon" variant="ghost" className="h-7 w-7 text-green-500" onClick={() => renameProduct(p.id, p.name)}>
-                                                    <Check className="h-3.5 w-3.5" />
-                                                </Button>
-                                                <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => setEditingProduct(null)}>
-                                                    <X className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-2 group">
-                                                <Package className="h-4 w-4 text-muted-foreground" />
-                                                {p.name}
-                                                <Button
-                                                    size="icon"
-                                                    variant="ghost"
-                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    onClick={() => setEditingProduct({ id: p.id, name: p.name })}
-                                                >
-                                                    <Pencil className="h-3 w-3" />
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {warehouses.map(w => {
-                                                const isAssigned = p.warehouseIds?.includes(w.id);
-                                                return (
-                                                    <Badge
-                                                        key={w.id}
-                                                        variant={isAssigned ? (w.type === 'leadership' ? 'warning' : 'default') : 'outline'}
-                                                        className={`text-[10px] cursor-pointer transition-colors ${!isAssigned && 'text-muted-foreground hover:bg-muted opacity-50'}`}
-                                                        onClick={() => toggleProductWarehouse(p.id, w.id, p.warehouseIds || [])}
-                                                    >
-                                                        {w.name}
-                                                    </Badge>
-                                                )
-                                            })}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button
-                                            size="sm"
-                                            variant={deleting === p.id ? 'destructive' : 'outline'}
-                                            className="gap-1.5"
-                                            onClick={() => deleteProduct(p.id, p.name)}
+                {/* ── Product list ── */}
+                <div className="space-y-1.5">
+                    {products.map((p, index) => (
+                        <div
+                            key={p.id}
+                            className="group flex items-center gap-3 px-3 py-2.5 rounded-xl border border-transparent bg-muted/20 hover:bg-muted/40 hover:border-border/30 transition-all"
+                        >
+                            {/* Sort controls */}
+                            <div className="flex flex-col gap-0.5 shrink-0">
+                                <button
+                                    className="p-0.5 rounded text-muted-foreground/40 hover:text-foreground hover:bg-muted transition-colors disabled:opacity-20 disabled:cursor-default"
+                                    disabled={index === 0}
+                                    onClick={() => moveProduct(index, -1)}
+                                >
+                                    <ArrowUp className="h-3 w-3" />
+                                </button>
+                                <button
+                                    className="p-0.5 rounded text-muted-foreground/40 hover:text-foreground hover:bg-muted transition-colors disabled:opacity-20 disabled:cursor-default"
+                                    disabled={index === products.length - 1}
+                                    onClick={() => moveProduct(index, 1)}
+                                >
+                                    <ArrowDown className="h-3 w-3" />
+                                </button>
+                            </div>
+
+                            {/* Product name */}
+                            <div className="flex-1 min-w-0">
+                                {editingProduct?.id === p.id ? (
+                                    <div className="flex items-center gap-1.5">
+                                        <Input
+                                            value={editingProduct.name}
+                                            onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                                            className="h-7 text-sm bg-background max-w-[200px]"
+                                            autoFocus
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') renameProduct(p.id, p.name);
+                                                if (e.key === 'Escape') setEditingProduct(null);
+                                            }}
+                                        />
+                                        <button className="p-1 rounded text-green-500 hover:bg-green-500/10 transition-colors" onClick={() => renameProduct(p.id, p.name)}>
+                                            <Check className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button className="p-1 rounded text-muted-foreground hover:bg-muted transition-colors" onClick={() => setEditingProduct(null)}>
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <Package className="h-4 w-4 text-muted-foreground/60 shrink-0" />
+                                        <span className="font-medium text-sm truncate">{p.name}</span>
+                                        <span className="font-mono text-[10px] text-muted-foreground/40">#{p.id}</span>
+                                        <button
+                                            className="p-1 rounded text-muted-foreground/30 hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-all"
+                                            onClick={() => setEditingProduct({ id: p.id, name: p.name })}
                                         >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                            {deleting === p.id ? 'Wirklich löschen?' : 'Löschen'}
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                            {products.length === 0 && !loading && (
-                                <TableRow>
-                                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                                        Noch keine Produkte vorhanden
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+                                            <Pencil className="h-3 w-3" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Warehouse pills */}
+                            <div className="flex items-center gap-1 shrink-0">
+                                {warehouses.map(w => {
+                                    const isAssigned = p.warehouseIds?.includes(w.id);
+                                    return (
+                                        <button
+                                            key={w.id}
+                                            onClick={() => toggleProductWarehouse(p.id, w.id, p.warehouseIds || [])}
+                                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all border ${isAssigned
+                                                    ? w.type === 'leadership'
+                                                        ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                                        : 'bg-primary/15 text-primary border-primary/30'
+                                                    : 'bg-transparent text-muted-foreground/40 border-border/30 hover:text-muted-foreground hover:border-border/50'
+                                                }`}
+                                        >
+                                            {w.type === 'leadership' ? 'Führung' : 'Normal'}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Stackable toggle */}
+                            <button
+                                onClick={() => toggleStackable(p.id, !!p.is_stackable)}
+                                className="flex items-center gap-1.5 shrink-0"
+                                title={p.is_stackable ? 'Stackable – Menge wird gescannt' : 'Non-stackable – immer 1x'}
+                            >
+                                <Layers className={`h-3.5 w-3.5 transition-colors ${p.is_stackable ? 'text-primary' : 'text-muted-foreground/30'}`} />
+                                <span className={`relative inline-flex h-[18px] w-8 items-center rounded-full transition-colors ${p.is_stackable ? 'bg-primary' : 'bg-input'}`}>
+                                    <span className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${p.is_stackable ? 'translate-x-[16px]' : 'translate-x-[3px]'}`} />
+                                </span>
+                            </button>
+
+                            {/* Delete */}
+                            <button
+                                onClick={() => deleteProduct(p.id, p.name)}
+                                className={`p-1.5 rounded-lg transition-all shrink-0 ${deleting === p.id
+                                        ? 'bg-destructive text-destructive-foreground'
+                                        : 'text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100'
+                                    }`}
+                                title={deleting === p.id ? 'Nochmal klicken zum Löschen' : 'Löschen'}
+                            >
+                                <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                    ))}
+
+                    {products.length === 0 && (
+                        <div className="text-center text-muted-foreground py-12">
+                            <Package className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                            <p>Noch keine Produkte vorhanden</p>
+                        </div>
+                    )}
                 </div>
             </CardContent>
         </Card>

@@ -10,13 +10,14 @@ router.get('/', (req, res) => {
 
 // POST /api/products – add new product
 router.post('/', (req, res) => {
-    const { name, warehouseIds } = req.body;
+    const { name, warehouseIds, is_stackable } = req.body;
     if (!name || !name.trim()) {
         return res.status(400).json({ error: 'Produktname ist erforderlich' });
     }
 
     try {
-        const result = db.prepare('INSERT INTO products (name) VALUES (?)').run(name.trim());
+        const stackable = is_stackable === undefined ? 1 : (is_stackable ? 1 : 0);
+        const result = db.prepare('INSERT INTO products (name, is_stackable) VALUES (?, ?)').run(name.trim(), stackable);
         const productId = result.lastInsertRowid;
 
         // Initialize inventory for new product only in selected warehouses
@@ -46,14 +47,29 @@ router.post('/', (req, res) => {
 // PUT /api/products/:id - rename product
 router.put('/:id', (req, res) => {
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, is_stackable } = req.body;
+
+    // Allow updating just stackable without name
+    if (is_stackable !== undefined && !name) {
+        try {
+            db.prepare('UPDATE products SET is_stackable = ? WHERE id = ?').run(is_stackable ? 1 : 0, id);
+            return res.json({ success: true });
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
+        }
+    }
 
     if (!name || !name.trim()) {
         return res.status(400).json({ error: 'Produktname ist erforderlich' });
     }
 
     try {
-        db.prepare('UPDATE products SET name = ? WHERE id = ?').run(name.trim(), id);
+        const stackable = is_stackable === undefined ? undefined : (is_stackable ? 1 : 0);
+        if (stackable !== undefined) {
+            db.prepare('UPDATE products SET name = ?, is_stackable = ? WHERE id = ?').run(name.trim(), stackable, id);
+        } else {
+            db.prepare('UPDATE products SET name = ? WHERE id = ?').run(name.trim(), id);
+        }
         res.json({ success: true, name: name.trim() });
     } catch (err) {
         if (err.message.includes('UNIQUE')) {
