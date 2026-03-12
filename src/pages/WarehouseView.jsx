@@ -523,7 +523,7 @@ export default function WarehouseView() {
                     )}
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mt-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 mt-4">
                         {localItems.map((item, index) => (
                             <div
                                 key={item.id}
@@ -531,7 +531,7 @@ export default function WarehouseView() {
                                 onDragStart={(e) => handleDragStart(e, index)}
                                 onDragOver={(e) => handleDragOver(e, index)}
                                 onDragEnd={handleDragEnd}
-                                className={`group relative flex flex-col p-4 rounded-xl border transition-all duration-200 ${!isEditing
+                                className={`group relative flex flex-col p-2.5 rounded-lg border transition-all duration-200 ${!isEditing
                                     ? 'cursor-grab active:cursor-grabbing border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
                                     : 'border-border/50 bg-card cursor-default'
                                     }`}
@@ -548,32 +548,29 @@ export default function WarehouseView() {
                                         <GripHorizontal className="h-4 w-4" />
                                     </div>
                                 )}
-                                <div className="flex items-start justify-between mb-3">
-                                    <div className={`p-2 rounded-lg transition-colors ${!isEditing ? 'bg-secondary group-hover:bg-primary/10' : 'bg-secondary'}`}>
-                                        <Package className={`h-5 w-5 ${!isEditing ? 'text-muted-foreground group-hover:text-primary' : 'text-muted-foreground'}`} />
-                                    </div>
-                                    {!isEditing && (
-                                        <Badge variant={item.quantity > 0 ? (item.quantity > 10 ? 'success' : 'warning') : 'destructive'}>
+                                {!isEditing && (
+                                    <div className="flex justify-end mb-1">
+                                        <Badge variant={item.quantity > 0 ? (item.quantity > 10 ? 'success' : 'warning') : 'destructive'} className="px-1.5 py-0 text-[10px] h-5">
                                             {item.quantity}
                                         </Badge>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
 
-                                <div className="flex-1">
-                                    <h3 className={`font-semibold text-sm line-clamp-2 ${!isEditing ? 'group-hover:text-primary transition-colors' : ''}`}>
+                                <div className="flex-1 mb-1">
+                                    <h3 className={`font-semibold text-xs leading-tight line-clamp-2 ${!isEditing ? 'group-hover:text-primary transition-colors' : ''}`}>
                                         {item.product_name}
                                     </h3>
                                 </div>
 
                                 {!isEditing && (
                                     <div
-                                        className="mt-3 pt-3 border-t border-border/20 flex items-center justify-between gap-1.5"
+                                        className="mt-2 pt-2 border-t border-border/20 flex items-center justify-between gap-1"
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         <Button
                                             size="sm"
                                             variant="outline"
-                                            className="h-8 w-9 p-0 shrink-0 text-primary border-primary/20 hover:bg-primary/10 hover:text-primary transition-colors"
+                                            className="h-7 w-8 p-0 shrink-0 text-primary border-primary/20 hover:bg-primary/10 hover:text-primary transition-colors text-[11px]"
                                             onClick={(e) => handleQuickTransaction(e, item, -1)}
                                             disabled={item.quantity <= 0}
                                             title="1 Auslagern"
@@ -583,7 +580,7 @@ export default function WarehouseView() {
 
                                         <div className="flex-1 relative">
                                             <Input
-                                                className="h-8 text-center text-xs px-1 bg-secondary/30 focus:bg-background transition-colors"
+                                                className="h-7 text-center text-[10px] px-1 bg-secondary/30 focus:bg-background transition-colors"
                                                 placeholder="± Zahl ↵"
                                                 title="Zahl eingeben und Enter drücken (+ für Einlagern, - für Auslagern)"
                                                 onKeyDown={(e) => {
@@ -602,7 +599,7 @@ export default function WarehouseView() {
                                         <Button
                                             size="sm"
                                             variant="outline"
-                                            className="h-8 w-9 p-0 shrink-0 text-success border-success/20 hover:bg-success/10 hover:text-success transition-colors"
+                                            className="h-7 w-8 p-0 shrink-0 text-success border-success/20 hover:bg-success/10 hover:text-success transition-colors text-[11px]"
                                             onClick={(e) => handleQuickTransaction(e, item, 1)}
                                             title="1 Einlagern"
                                         >
@@ -612,15 +609,15 @@ export default function WarehouseView() {
                                 )}
 
                                 {isEditing && (
-                                    <div className="mt-3 pt-3 border-t border-border/50">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="text-xs text-muted-foreground">Bestand:</span>
+                                    <div className="mt-2 pt-2 border-t border-border/50">
+                                        <div className="flex items-center justify-between gap-1">
+                                            <span className="text-[11px] text-muted-foreground">Bestand:</span>
                                             <Input
                                                 type="number"
                                                 min="0"
                                                 value={edits[item.product_id] || ''}
                                                 onChange={(e) => setEdits({ ...edits, [item.product_id]: e.target.value })}
-                                                className="w-20 text-right h-8 text-sm"
+                                                className="w-16 text-right h-7 text-xs px-2"
                                                 onClick={(e) => e.stopPropagation()}
                                             />
                                         </div>
