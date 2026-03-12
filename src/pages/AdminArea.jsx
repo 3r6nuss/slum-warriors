@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectOption } from '@/components/ui/select';
@@ -1383,9 +1384,9 @@ function SettingsManagement() {
     );
 }
 
-export default function AdminArea({ initialTab = 'roles' }) {
+export default function AdminArea() {
     const { isAdmin } = useAuth();
-    const [activeTab, setActiveTab] = useState(initialTab);
+    const { tab } = useParams();
 
     if (!isAdmin) {
         return (
@@ -1397,8 +1398,20 @@ export default function AdminArea({ initialTab = 'roles' }) {
         );
     }
 
+    const renderContent = () => {
+        switch (tab) {
+            case 'roles': return <RoleManagement />;
+            case 'products': return <ProductManagement />;
+            case 'logs': return <LogPage />;
+            case 'console': return <ServerConsole />;
+            case 'wsmonitor': return <WsMonitor />;
+            case 'settings': return <SettingsManagement />;
+            default: return <RoleManagement />;
+        }
+    };
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-7xl mx-auto">
             <div>
                 <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
                     <ShieldCheck className="h-8 w-8 text-primary" />
@@ -1407,36 +1420,9 @@ export default function AdminArea({ initialTab = 'roles' }) {
                 <p className="text-muted-foreground mt-1">Benutzerverwaltung, Logs und System-Monitoring</p>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col md:flex-row gap-6">
-                <TabsList className="flex flex-col h-auto bg-card border justify-start w-full md:w-56 overflow-hidden rounded-xl">
-                    <TabsTrigger value="roles" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">Rollenverwaltung</TabsTrigger>
-                    <TabsTrigger value="products" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">Produkte</TabsTrigger>
-                    <TabsTrigger value="logs" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">System-Logs</TabsTrigger>
-                    <TabsTrigger value="console" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">Konsole</TabsTrigger>
-                    <TabsTrigger value="wsmonitor" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">WS Monitor</TabsTrigger>
-                    <TabsTrigger value="settings" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">System-Einst.</TabsTrigger>
-                </TabsList>
-                <div className="flex-1 min-w-0">
-                    <TabsContent value="roles" className="mt-0">
-                        <RoleManagement />
-                    </TabsContent>
-                    <TabsContent value="products" className="mt-0">
-                        <ProductManagement />
-                    </TabsContent>
-                    <TabsContent value="logs" className="mt-0">
-                        <LogPage />
-                    </TabsContent>
-                    <TabsContent value="console" className="mt-0">
-                        <ServerConsole />
-                    </TabsContent>
-                    <TabsContent value="wsmonitor" className="mt-0">
-                        <WsMonitor />
-                    </TabsContent>
-                    <TabsContent value="settings" className="mt-0">
-                        <SettingsManagement />
-                    </TabsContent>
-                </div>
-            </Tabs>
+            <div className="mt-8">
+                {renderContent()}
+            </div>
         </div>
     );
 }

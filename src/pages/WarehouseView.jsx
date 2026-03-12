@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import { useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { useInventorySocket } from '@/lib/websocket';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,12 +8,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
     Package, Shield, Warehouse, Settings, Save, X, Loader2,
-    PackagePlus, PackageMinus, CheckCircle, AlertCircle, GripHorizontal, ScanLine
+    PackagePlus, PackageMinus, CheckCircle, AlertCircle, GripHorizontal, ScanLine,
+    ArrowDownToLine, ArrowUpToLine
 } from 'lucide-react';
 
-const InventoryScanner = lazy(() => import('@/components/InventoryScanner'));
+const InventoryScanner = React.lazy(() => import('@/components/InventoryScanner'));
 
 const warehouseMeta = {
     1: { label: 'Führungslager', icon: Shield, type: 'leadership' },
@@ -41,12 +44,13 @@ function TransactionDialog({ item, warehouseId, user, onClose }) {
             return;
         }
         if (mode === 'checkout' && qty > item.quantity) {
-            setStatus({ type: 'error', message: `Nicht genügend Bestand. Verfügbar: ${item.quantity}` });
+            setStatus({ type: 'error', message: `Maximal ${item.quantity} verfügbar` });
             return;
         }
 
         setLoading(true);
         setStatus(null);
+
         try {
             const res = await fetch('/api/transactions', {
                 method: 'POST',
@@ -77,66 +81,58 @@ function TransactionDialog({ item, warehouseId, user, onClose }) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-            <div
-                className="relative z-10 w-full max-w-md rounded-2xl bg-card border border-border/50 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-                onClick={(e) => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-border/50">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-primary/10">
-                            <Package className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-bold">{item.product_name}</h3>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-sm text-muted-foreground">Bestand:</span>
-                                <Badge variant={item.quantity > 0 ? (item.quantity > 10 ? 'success' : 'warning') : 'destructive'}>
-                                    {item.quantity}
-                                </Badge>
-                            </div>
-                        </div>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
-                        <X className="h-4 w-4" />
-                    </Button>
-                </div>
+        <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl border-border/50 shadow-2xl">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Package className="h-5 w-5 text-primary" />
+                        {item.product_name}
+                    </DialogTitle>
+                </DialogHeader>
 
-                {/* Body */}
-                <div className="p-5">
-                    {!mode && !status ? (
-                        <div className="grid grid-cols-2 gap-3">
+                <div className="py-2">
+                    {status && (
+                        <div className={`p-3 rounded-lg mb-4 text-sm font-medium border ${status.type === 'error'
+                            ? 'bg-destructive/10 text-destructive border-destructive/20'
+                            : 'bg-success/10 text-success border-success/20'
+                            }`}>
+                            {status.message}
+                        </div>
+                    )}
+
+                    {!mode ? (
+                        <div className="grid grid-cols-2 gap-4">
                             <button
                                 onClick={() => setMode('checkin')}
-                                className="group flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-border/50 hover:border-success hover:bg-success/10 transition-colors duration-75"
+                                className="flex flex-col items-center justify-center gap-3 p-6 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all group"
                             >
-                                <div className="p-3 rounded-full bg-success/10 group-hover:bg-success/20 transition-colors">
-                                    <PackagePlus className="h-6 w-6 text-success" />
+                                <div className="p-3 rounded-full bg-primary/20 group-hover:scale-110 transition-transform">
+                                    <ArrowDownToLine className="h-6 w-6 text-primary" />
                                 </div>
-                                <span className="font-semibold text-sm">Einlagern</span>
+                                <span className="font-semibold">Einlagern</span>
                             </button>
+
                             <button
                                 onClick={() => setMode('checkout')}
-                                className="group flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-border/50 hover:border-primary hover:bg-primary/10 transition-colors duration-75"
+                                disabled={item.quantity === 0}
+                                className={`flex flex-col items-center justify-center gap-3 p-6 rounded-xl border-2 border-dashed transition-all group ${item.quantity === 0
+                                    ? 'border-muted bg-muted/30 opacity-50 cursor-not-allowed'
+                                    : 'border-destructive/30 bg-destructive/5 hover:bg-destructive/10 hover:border-destructive/50'
+                                    }`}
                             >
-                                <div className="p-3 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                                    <PackageMinus className="h-6 w-6 text-primary" />
+                                <div className={`p-3 rounded-full transition-transform ${item.quantity === 0 ? 'bg-muted' : 'bg-destructive/20 group-hover:scale-110'
+                                    }`}>
+                                    <ArrowUpToLine className={`h-6 w-6 ${item.quantity === 0 ? 'text-muted-foreground' : 'text-destructive'}`} />
                                 </div>
-                                <span className="font-semibold text-sm">Auslagern</span>
+                                <span className={`font-semibold ${item.quantity === 0 ? 'text-muted-foreground' : ''}`}>Auslagern</span>
+                                {item.quantity === 0 && (
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Leer</span>
+                                )}
                             </button>
                         </div>
-                    ) : status?.type === 'success' ? (
-                        <div className="flex flex-col items-center gap-3 py-4">
-                            <div className="p-3 rounded-full bg-success/10">
-                                <CheckCircle className="h-8 w-8 text-success" />
-                            </div>
-                            <p className="font-medium text-success">{status.message}</p>
-                        </div>
                     ) : (
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div className="flex items-center gap-2 mb-2">
+                        <form onSubmit={handleSubmit} className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="flex items-center justify-between bg-muted/50 p-3 rounded-lg border border-border/50">
                                 <button
                                     type="button"
                                     onClick={() => { setMode(null); setStatus(null); }}
@@ -178,31 +174,19 @@ function TransactionDialog({ item, warehouseId, user, onClose }) {
                                 )}
                             </div>
 
-                            {status?.type === 'error' && (
-                                <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive">
-                                    <AlertCircle className="h-4 w-4 shrink-0" />
-                                    <span className="text-sm font-medium">{status.message}</span>
-                                </div>
-                            )}
-
-                            <Button type="submit" className="w-full" disabled={loading}>
-                                {loading ? (
-                                    <>
-                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                        Wird verarbeitet...
-                                    </>
-                                ) : (
-                                    <>
-                                        {mode === 'checkin' ? <PackagePlus className="h-4 w-4 mr-2" /> : <PackageMinus className="h-4 w-4 mr-2" />}
-                                        {mode === 'checkin' ? 'Einlagern' : 'Auslagern'}
-                                    </>
-                                )}
+                            <Button
+                                type="submit"
+                                className={`w-full ${mode === 'checkin' ? 'bg-success hover:bg-success/90 text-success-foreground' : 'bg-destructive hover:bg-destructive/90 text-destructive-foreground'}`}
+                                disabled={loading}
+                            >
+                                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {mode === 'checkin' ? 'Einlagern bestätigen' : 'Auslagern bestätigen'}
                             </Button>
                         </form>
                     )}
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -210,8 +194,11 @@ function TransactionDialog({ item, warehouseId, user, onClose }) {
 export default function WarehouseView() {
     const { isAdmin, isLeadership, user } = useAuth();
     const { inventory, connected } = useInventorySocket();
+    const { id } = useParams();
+    const warehouseId = id || '2'; // Default to "Normales Lager"
 
-    const [activeWarehouse, setActiveWarehouse] = useState('2'); // default: Normales Lager
+    const meta = warehouseMeta[warehouseId] || { label: 'Lager', icon: Warehouse, type: 'normal' };
+
     const [selectedItem, setSelectedItem] = useState(null);
 
     // Inline edit state (for admins/leadership)
@@ -224,8 +211,6 @@ export default function WarehouseView() {
 
     const [quickStatus, setQuickStatus] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
-
-    const warehouseId = activeWarehouse;
 
     // Local state for optimistic drag & drop reordering
     const [localItems, setLocalItems] = useState([]);
@@ -241,9 +226,6 @@ export default function WarehouseView() {
             setLocalItems(warehouseItems);
         }
     }, [warehouseItems, draggedIdx]);
-
-    const meta = warehouseMeta[warehouseId] || { label: 'Lager', icon: Warehouse, type: 'normal' };
-    const Icon = meta.icon;
 
     // Refresh selected item data when inventory updates
     useEffect(() => {
@@ -421,20 +403,25 @@ export default function WarehouseView() {
         }
     };
 
-    const availableWarehouses = isLeadership
-        ? [
-            { id: '2', label: 'Normales Lager', icon: Warehouse },
-            { id: '3', label: 'Waffenlager', icon: Warehouse },
-            { id: '1', label: 'Führungslager', icon: Shield },
-            { id: '4', label: 'Führungs-Waffen', icon: Shield },
-        ]
-        : [
-            { id: '2', label: 'Normales Lager', icon: Warehouse },
-            { id: '3', label: 'Waffenlager', icon: Warehouse },
-        ];
+    if (!meta) {
+        return <Navigate to="/lager/2" replace />;
+    }
+
+    // Authorization check for leadership warehouses
+    if (meta.type === 'leadership' && !isLeadership) {
+        return (
+            <div className="flex flex-col items-center justify-center py-20">
+                <Shield className="h-16 w-16 text-muted-foreground mb-4" />
+                <h2 className="text-2xl font-bold mb-2">Zugriff verweigert</h2>
+                <p className="text-muted-foreground">Dieser Bereich ist nur für die Führungsebene zugänglich.</p>
+            </div>
+        );
+    }
+
+    const Icon = meta.icon;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-7xl mx-auto">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -442,7 +429,7 @@ export default function WarehouseView() {
                         <Icon className={`h-7 w-7 ${meta.type === 'leadership' ? 'text-primary' : 'text-muted-foreground'}`} />
                     </div>
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight">Lager</h1>
+                        <h1 className="text-3xl font-bold tracking-tight">{meta.label}</h1>
                         <p className="text-muted-foreground mt-0.5">
                             {warehouseItems.length} Produkte im Bestand
                         </p>
@@ -456,30 +443,7 @@ export default function WarehouseView() {
                 </div>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-6">
-                {/* Warehouse Sidebar */}
-                {availableWarehouses.length > 1 && (
-                    <div className="flex flex-col gap-2 w-full md:w-56 shrink-0 bg-card border rounded-xl p-2 h-fit">
-                        {availableWarehouses.map((wh) => {
-                            const WhIcon = wh.icon;
-                            const isActive = activeWarehouse === wh.id;
-                            return (
-                                <button
-                                    key={wh.id}
-                                    onClick={() => { setActiveWarehouse(wh.id); setIsEditing(false); setEditStatus(null); }}
-                                    className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 text-left ${isActive
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground'
-                                        }`}
-                                >
-                                    <WhIcon className="h-4 w-4 shrink-0" />
-                                    {wh.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-                )}
-
+            <div className="mt-8">
                 {/* Inventory Area */}
                 <div className="flex-1 min-w-0">
                     <Card className="overflow-hidden backdrop-blur-sm bg-card/80 border-border/50">

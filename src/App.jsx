@@ -1,8 +1,8 @@
-import { BrowserRouter as Router, Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useParams } from 'react-router-dom';
 import { useState } from 'react';
 import {
   User, Menu, Swords, Shield, Warehouse,
-  ShieldCheck, LogOut, Users
+  ShieldCheck, LogOut, Users, Package, FileText, Terminal, Activity, Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AuthProvider, useAuth } from '@/lib/auth';
@@ -50,7 +50,13 @@ function UserProfile() {
 }
 
 function Sidebar({ open, onClose }) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isLeadership } = useAuth();
+
+  const navLinkStyle = ({ isActive }) =>
+    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
+      ? 'bg-sidebar-accent/50 text-sidebar-foreground'
+      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/30'
+    }`;
 
   return (
     <>
@@ -81,51 +87,73 @@ function Sidebar({ open, onClose }) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 overflow-y-auto">
-          <div className="mt-2 mb-2 px-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-              Übersicht
-            </p>
-          </div>
-          <div className="space-y-1">
-            <NavLink
-              to="/lager"
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
-                  ? 'bg-sidebar-accent/50 text-sidebar-foreground'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/30'
-                }`
-              }
-            >
-              <Warehouse className="h-4 w-4" />
-              Lager
-            </NavLink>
+        <nav className="flex-1 p-4 overflow-y-auto space-y-6">
+
+          {/* Kategorie: Lager */}
+          <div>
+            <div className="mb-2 px-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                Kategorie: Lager
+              </p>
+            </div>
+            <div className="space-y-1">
+              <NavLink to="/lager/2" onClick={onClose} className={navLinkStyle}>
+                <Warehouse className="h-4 w-4" /> Normales Lager
+              </NavLink>
+              <NavLink to="/lager/3" onClick={onClose} className={navLinkStyle}>
+                <Warehouse className="h-4 w-4" /> Waffenlager
+              </NavLink>
+            </div>
           </div>
 
-          {isAdmin && (
-            <>
-              <div className="mt-5 mb-2 px-3">
+          {/* Kategorie: Führung */}
+          {(isAdmin || isLeadership) && (
+            <div>
+              <div className="mb-2 px-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-                  Verwaltung
+                  Kategorie: Führung
                 </p>
               </div>
               <div className="space-y-1">
-                <NavLink
-                  to="/admin"
-                  onClick={onClose}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
-                      ? 'bg-sidebar-accent/50 text-sidebar-foreground'
-                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/30'
-                    }`
-                  }
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                  Admin
+                <NavLink to="/lager/1" onClick={onClose} className={navLinkStyle}>
+                  <Shield className="h-4 w-4" /> Führungslager
+                </NavLink>
+                <NavLink to="/lager/4" onClick={onClose} className={navLinkStyle}>
+                  <Shield className="h-4 w-4" /> Führungs-Waffen
                 </NavLink>
               </div>
-            </>
+            </div>
+          )}
+
+          {/* Kategorie: Admin */}
+          {isAdmin && (
+            <div>
+              <div className="mb-2 px-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                  Kategorie: Admin
+                </p>
+              </div>
+              <div className="space-y-1">
+                <NavLink to="/admin/roles" onClick={onClose} className={navLinkStyle}>
+                  <Users className="h-4 w-4" /> Rollenverwaltung
+                </NavLink>
+                <NavLink to="/admin/products" onClick={onClose} className={navLinkStyle}>
+                  <Package className="h-4 w-4" /> Produkte
+                </NavLink>
+                <NavLink to="/admin/logs" onClick={onClose} className={navLinkStyle}>
+                  <FileText className="h-4 w-4" /> System-Logs
+                </NavLink>
+                <NavLink to="/admin/console" onClick={onClose} className={navLinkStyle}>
+                  <Terminal className="h-4 w-4" /> Konsole
+                </NavLink>
+                <NavLink to="/admin/wsmonitor" onClick={onClose} className={navLinkStyle}>
+                  <Activity className="h-4 w-4" /> WS Monitor
+                </NavLink>
+                <NavLink to="/admin/settings" onClick={onClose} className={navLinkStyle}>
+                  <Settings className="h-4 w-4" /> System-Einst.
+                </NavLink>
+              </div>
+            </div>
           )}
         </nav>
 
@@ -177,10 +205,11 @@ function AppShell() {
 
         <main className="p-6 lg:p-8 max-w-7xl mx-auto">
           <Routes>
-            <Route path="/" element={<Navigate to="/lager" replace />} />
-            <Route path="/lager" element={<WarehouseView />} />
-            <Route path="/admin" element={<AdminArea />} />
-            <Route path="/admin/logs" element={<AdminArea initialTab="logs" />} />
+            <Route path="/" element={<Navigate to="/lager/2" replace />} />
+            <Route path="/lager" element={<Navigate to="/lager/2" replace />} />
+            <Route path="/lager/:id" element={<WarehouseView />} />
+            <Route path="/admin" element={<Navigate to="/admin/roles" replace />} />
+            <Route path="/admin/:tab" element={<AdminArea />} />
           </Routes>
         </main>
       </div>
