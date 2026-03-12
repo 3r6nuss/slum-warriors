@@ -369,32 +369,29 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                 }
             }
 
-            // Accumulate results (add to previous scans, update duplicates)
-            setAllResults(prev => {
-                const merged = [...prev];
-                for (const item of newResults) {
-                    const existIdx = merged.findIndex(m =>
-                        m.name.toLowerCase() === item.name.toLowerCase()
-                    );
-                    if (existIdx >= 0) {
-                        merged[existIdx] = item; // update existing
-                    } else {
-                        merged.push(item);
-                    }
-                }
-                return merged;
-            });
-
-            setProgress(95);
-            setProgressLabel('Abgleich...');
-
-            // Build results from all accumulated data
+            // Accumulate results (sum non-stackables, update duplicates for stackables)
             const accumResults = [...allResults];
             for (const item of newResults) {
                 const existIdx = accumResults.findIndex(m => m.name.toLowerCase() === item.name.toLowerCase());
-                if (existIdx >= 0) accumResults[existIdx] = item;
-                else accumResults.push(item);
+                if (existIdx >= 0) {
+                    const match = bestMatch(item.name, productNames);
+                    const wi = match ? warehouseItems.find(w => w.product_name === match) : null;
+                    if (wi && !wi.is_stackable) {
+                        // Sum quantities for non-stackable items
+                        accumResults[existIdx] = { ...item, quantity: accumResults[existIdx].quantity + item.quantity };
+                    } else {
+                        // Overwrite for stackable items (latest scan wins)
+                        accumResults[existIdx] = item;
+                    }
+                } else {
+                    accumResults.push(item);
+                }
             }
+
+            setAllResults(accumResults);
+
+            setProgress(95);
+            setProgressLabel('Abgleich...');
 
             const matched = accumResults.map(item => {
                 const match = bestMatch(item.name, productNames);
