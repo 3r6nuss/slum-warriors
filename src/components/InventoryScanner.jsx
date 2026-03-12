@@ -40,13 +40,17 @@ function levenshtein(a, b) {
 }
 
 function bestMatch(ocrName, productNames) {
-    const normalized = ocrName.toLowerCase().trim();
+    const normalized = ocrName.toLowerCase().replace(/\s+/g, ' ').trim();
     if (!normalized || normalized.length < 2) return null;
     let best = null, bestScore = Infinity;
     for (const name of productNames) {
-        const np = name.toLowerCase().trim();
+        const np = name.toLowerCase().replace(/\s+/g, ' ').trim();
         const dist = levenshtein(normalized, np);
-        const bonus = np.includes(normalized) || normalized.includes(np) ? -2 : 0;
+        let bonus = 0;
+        if (np.includes(normalized) && normalized.length >= 4) bonus = -3;
+        else if (normalized.includes(np) && np.length >= 4) bonus = -3;
+        else if (np.includes(normalized) || normalized.includes(np)) bonus = -1;
+
         const score = dist + bonus;
         if (score < bestScore) { bestScore = score; best = name; }
     }
@@ -82,14 +86,48 @@ function parseCellText(text) {
     return { quantity, name: nameParts.join(' ').trim() || null };
 }
 
-/* ── Crop helper ──────────────────────────────────────────────── */
-function cropToDataUrl(canvas, x, y, w, h) {
+/* ── Crop & Preprocess helper ─────────────────────────────────── */
+function preprocessCrop(canvas, x, y, w, h) {
+    const SCALE = 3;
     const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(w));
-    c.height = Math.max(1, Math.round(h));
-    c.getContext('2d').drawImage(canvas,
-        Math.round(x), Math.round(y), Math.round(w), Math.round(h),
+    const width = Math.max(1, Math.round(w));
+    const height = Math.max(1, Math.round(h));
+
+    // Create scaled canvas
+    c.width = width * SCALE;
+    c.height = height * SCALE;
+    const ctx = c.getContext('2d');
+
+    // Smooth scaling for OCR
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Draw the crop upscaled
+    ctx.drawImage(canvas,
+        Math.round(x), Math.round(y), width, height,
         0, 0, c.width, c.height);
+
+    // Apply Grayscale and Binarization to enhance text contrast
+    const imageData = ctx.getImageData(0, 0, c.width, c.height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        // Binarize: Make light pixels black (text), dark pixels white (background)
+        const isLight = lum > 130;
+        const val = isLight ? 0 : 255;
+
+        data[i] = val;
+        data[i + 1] = val;
+        data[i + 2] = val;
+        data[i + 3] = 255; // fully opaque
+    }
+
+    ctx.putImageData(imageData, 0, 0);
     return c.toDataURL('image/png');
 }
 
@@ -228,6 +266,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         setProgress(0);
         setProgressLabel('Lade Tesseract.js...');
 
+        let workerNum = null;
+        let workerName = null;
+
         try {
             const Tesseract = await import('tesseract.js');
 
@@ -251,6 +292,13 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
             const cellH = gh / numRows;
 
             const totalCells = numCols * numRows;
+            setProgressLabel('Initialisiere Tesseract Worker...');
+            setProgress(3);
+
+            workerNum = await Tesseract.createWorker('eng');
+            await workerNum.setParameters({ tessedit_char_whitelist: '0123456789.,' });
+            workerName = await Tesseract.createWorker('deu+eng');
+
             setProgressLabel(`${totalCells} Zellen scannen...`);
             setProgress(5);
 
@@ -265,19 +313,17 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                     setProgress(5 + Math.round((cellIdx / totalCells) * 85));
                     setProgressLabel(`Zelle ${cellIdx}/${totalCells}...`);
 
-                    // Crop the NUMBER BADGE area (top ~22% of cell)
-                    const numCrop = cropToDataUrl(canvas, cellX, cellY, cellW, cellH * 0.22);
+                    // Crop the NUMBER BADGE area (top ~25% of cell, centered)
+                    const numCrop = preprocessCrop(canvas, cellX + cellW * 0.2, cellY, cellW * 0.6, cellH * 0.25);
 
-                    // Crop the NAME area (bottom ~22% of cell)
-                    const nameCrop = cropToDataUrl(canvas, cellX, cellY + cellH * 0.78, cellW, cellH * 0.22);
+                    // Crop the NAME area (bottom ~28% of cell)
+                    const nameCrop = preprocessCrop(canvas, cellX, cellY + cellH * 0.72, cellW, cellH * 0.28);
 
                     let quantity = null, name = null;
 
                     try {
                         // OCR the number region
-                        const numResult = await Tesseract.recognize(numCrop, 'eng', {
-                            tessedit_char_whitelist: '0123456789.,',
-                        });
+                        const numResult = await workerNum.recognize(numCrop);
                         const numText = numResult.data.text.trim();
                         if (numText) {
                             const parsed = parseGermanNumber(numText);
@@ -287,10 +333,16 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
 
                     try {
                         // OCR the name region
-                        const nameResult = await Tesseract.recognize(nameCrop, 'deu+eng');
-                        const nameText = nameResult.data.text.trim();
-                        if (nameText && /[a-zA-ZäöüÄÖÜß]/.test(nameText) && nameText.length >= 2) {
-                            name = nameText.replace(/\n/g, ' ').trim();
+                        const nameResult = await workerName.recognize(nameCrop);
+
+                        // Clean up common OCR artifacts
+                        const nameText = nameResult.data.text
+                            .replace(/[\|\>\<\'\”\"\`\_\-\~]/g, ' ')
+                            .replace(/\s+/g, ' ')
+                            .trim();
+
+                        if (nameText && /[a-zA-ZäöüÄÖÜß]/.test(nameText) && nameText.length >= 3) {
+                            name = nameText;
                         }
                     } catch { /* skip */ }
 
@@ -367,8 +419,11 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         } catch (err) {
             console.error('Scan error:', err);
             setScanResults({ error: err.message });
+        } finally {
+            if (workerNum) await workerNum.terminate();
+            if (workerName) await workerName.terminate();
+            setScanning(false);
         }
-        setScanning(false);
     };
 
     /* ── Load next screenshot (keep grid + results) ───────────── */
@@ -632,13 +687,13 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                             <div key={`cell-${i}`} className="absolute pointer-events-none"
                                                 style={{ left: `${col * cw}%`, top: `${row * ch}%`, width: `${cw}%`, height: `${ch}%` }}>
                                                 {/* Number region highlight */}
-                                                <div className="absolute inset-x-1 top-0.5 bg-emerald-400/20 border border-emerald-400/40 rounded-sm"
-                                                    style={{ height: '22%' }}>
+                                                <div className="absolute top-0.5 bg-emerald-400/20 border border-emerald-400/40 rounded-sm"
+                                                    style={{ height: '25%', left: '20%', right: '20%' }}>
                                                     <span className="text-[7px] text-emerald-300 px-0.5">Zahl</span>
                                                 </div>
                                                 {/* Name region highlight */}
                                                 <div className="absolute inset-x-1 bottom-0.5 bg-blue-400/20 border border-blue-400/40 rounded-sm"
-                                                    style={{ height: '22%' }}>
+                                                    style={{ height: '28%' }}>
                                                     <span className="text-[7px] text-blue-300 px-0.5">Name</span>
                                                 </div>
                                             </div>
