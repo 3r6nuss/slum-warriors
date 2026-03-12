@@ -296,8 +296,14 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
             setProgress(3);
 
             workerNum = await Tesseract.createWorker('eng');
-            await workerNum.setParameters({ tessedit_char_whitelist: '0123456789.,' });
+            await workerNum.setParameters({
+                tessedit_char_whitelist: '0123456789.,',
+                tessedit_pageseg_mode: '7'
+            });
             workerName = await Tesseract.createWorker('deu+eng');
+            await workerName.setParameters({
+                tessedit_pageseg_mode: '7'
+            });
 
             setProgressLabel(`${totalCells} Zellen scannen...`);
             setProgress(5);
