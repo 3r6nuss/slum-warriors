@@ -178,8 +178,32 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         reader.onload = (e) => {
             const img = new Image();
             img.onload = () => {
-                setImgNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
-                setImagePreview(e.target.result);
+                // Determine the right panel crop boundaries (right ~60% of the image)
+                // This isolates the storage/warehouse panel in the GTA interface
+                const cropX = img.naturalWidth * 0.40; // Start at 40% from the left
+                const cropY = 0;
+                const cropW = img.naturalWidth - cropX;
+                const cropH = img.naturalHeight;
+
+                // Create a temporary canvas to perform the crop
+                const canvas = document.createElement('canvas');
+                canvas.width = cropW;
+                canvas.height = cropH;
+                const ctx = canvas.getContext('2d');
+
+                // Draw only the right portion of the original image onto the canvas
+                ctx.drawImage(
+                    img,
+                    cropX, cropY, cropW, cropH, // Source rectangle
+                    0, 0, cropW, cropH          // Destination rectangle
+                );
+
+                // Export the cropped image
+                const croppedDataUrl = canvas.toDataURL('image/png');
+
+                // Update state with the *cropped* image dimensions and source
+                setImgNaturalSize({ w: cropW, h: cropH });
+                setImagePreview(croppedDataUrl);
             };
             img.src = e.target.result;
         };
