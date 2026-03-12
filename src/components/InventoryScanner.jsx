@@ -462,6 +462,32 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         setApplying(false);
     };
 
+    const adjustQuantity = (idx, delta, e) => {
+        if (e) e.stopPropagation();
+        setScanResults(prev => {
+            if (!prev) return prev;
+            const m = [...prev.matched];
+            const currentObj = m[idx];
+
+            const newQty = Math.max(0, (currentObj.ocrQuantity || 0) + delta);
+            const newDiff = currentObj.matchedItem ? newQty - currentObj.matchedItem.quantity : null;
+
+            m[idx] = { ...currentObj, ocrQuantity: newQty, diff: newDiff };
+
+            // Sync back to allResults so next runScan doesn't wipe manual changes
+            setAllResults(currentAll => {
+                const nextAll = [...currentAll];
+                const allIdx = nextAll.findIndex(a => a.name === currentObj.ocrName);
+                if (allIdx >= 0) {
+                    nextAll[allIdx] = { ...nextAll[allIdx], quantity: newQty };
+                }
+                return nextAll;
+            });
+
+            return { ...prev, matched: m };
+        });
+    };
+
     const toggleAccept = (idx) => {
         setScanResults(prev => {
             const m = [...prev.matched];
@@ -798,7 +824,21 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                                         : <span className="text-muted-foreground italic text-xs">—</span>}
                                                 </td>
                                                 <td className="p-2.5 text-right font-mono font-semibold text-xs">
-                                                    {row.ocrQuantity?.toLocaleString('de-DE')}
+                                                    {row.matchedItem && !row.matchedItem.is_stackable ? (
+                                                        <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                                                            <button
+                                                                className="h-5 w-5 rounded bg-secondary/50 hover:bg-secondary flex items-center justify-center text-muted-foreground transition-colors"
+                                                                onClick={(e) => adjustQuantity(idx, -1, e)}
+                                                            >-</button>
+                                                            <span className="w-6 text-center">{row.ocrQuantity?.toLocaleString('de-DE')}</span>
+                                                            <button
+                                                                className="h-5 w-5 rounded bg-secondary/50 hover:bg-secondary flex items-center justify-center text-muted-foreground transition-colors"
+                                                                onClick={(e) => adjustQuantity(idx, 1, e)}
+                                                            >+</button>
+                                                        </div>
+                                                    ) : (
+                                                        row.ocrQuantity?.toLocaleString('de-DE')
+                                                    )}
                                                 </td>
                                                 <td className="p-2.5 text-right font-mono text-muted-foreground text-xs">
                                                     {row.currentQuantity?.toLocaleString('de-DE') ?? '—'}
