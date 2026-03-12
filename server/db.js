@@ -153,12 +153,32 @@ if (!webhookSetting) {
   db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('webhook_enabled', 'true');
 }
 
-// Seed warehouses if not exist
-const warehouseCount = db.prepare('SELECT COUNT(*) as count FROM warehouses').get();
-if (warehouseCount.count === 0) {
-  const insertWarehouse = db.prepare('INSERT INTO warehouses (name, type) VALUES (?, ?)');
+// Seed warehouses if they don't exist
+const warehouseNames = db.prepare('SELECT name FROM warehouses').all().map(w => w.name);
+const insertWarehouse = db.prepare('INSERT INTO warehouses (name, type) VALUES (?, ?)');
+
+if (!warehouseNames.includes('Führungslager')) {
   insertWarehouse.run('Führungslager', 'leadership');
+}
+if (!warehouseNames.includes('Normales Lager')) {
   insertWarehouse.run('Normales Lager', 'normal');
+}
+if (!warehouseNames.includes('Waffenlager')) {
+  insertWarehouse.run('Waffenlager', 'normal');
+}
+if (!warehouseNames.includes('Führungswaffenlager')) {
+  insertWarehouse.run('Führungswaffenlager', 'leadership');
+}
+
+// Ensure all products have inventory records in all warehouses
+const allWarehouses = db.prepare('SELECT id FROM warehouses').all();
+const allProducts = db.prepare('SELECT id FROM products').all();
+const insertMissingInventory = db.prepare('INSERT OR IGNORE INTO inventory (warehouse_id, product_id, quantity) VALUES (?, ?, 0)');
+
+for (const wh of allWarehouses) {
+  for (const prod of allProducts) {
+    insertMissingInventory.run(wh.id, prod.id);
+  }
 }
 
 // Seed default products if not exist

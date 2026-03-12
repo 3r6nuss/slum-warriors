@@ -17,6 +17,8 @@ const InventoryScanner = lazy(() => import('@/components/InventoryScanner'));
 const warehouseMeta = {
     1: { label: 'Führungslager', icon: Shield, type: 'leadership' },
     2: { label: 'Normales Lager', icon: Warehouse, type: 'normal' },
+    3: { label: 'Waffenlager', icon: Warehouse, type: 'normal' },
+    4: { label: 'Führungswaffenlager', icon: Shield, type: 'leadership' },
 };
 
 /* ─────────────────────── Transaction Dialog ─────────────────────── */
@@ -422,9 +424,14 @@ export default function WarehouseView() {
     const availableWarehouses = isLeadership
         ? [
             { id: '2', label: 'Normales Lager', icon: Warehouse },
+            { id: '3', label: 'Waffenlager', icon: Warehouse },
             { id: '1', label: 'Führungslager', icon: Shield },
+            { id: '4', label: 'Führungs-Waffen', icon: Shield },
         ]
-        : [{ id: '2', label: 'Normales Lager', icon: Warehouse }];
+        : [
+            { id: '2', label: 'Normales Lager', icon: Warehouse },
+            { id: '3', label: 'Waffenlager', icon: Warehouse },
+        ];
 
     return (
         <div className="space-y-6">
@@ -449,243 +456,247 @@ export default function WarehouseView() {
                 </div>
             </div>
 
-            {/* Warehouse Tabs (only if leadership has multiple) */}
-            {availableWarehouses.length > 1 && (
-                <div className="flex gap-2">
-                    {availableWarehouses.map((wh) => {
-                        const WhIcon = wh.icon;
-                        const isActive = activeWarehouse === wh.id;
-                        return (
-                            <button
-                                key={wh.id}
-                                onClick={() => { setActiveWarehouse(wh.id); setIsEditing(false); setEditStatus(null); }}
-                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${isActive
-                                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                                    : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
-                                    }`}
-                            >
-                                <WhIcon className="h-4 w-4" />
-                                {wh.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* Inventory Table */}
-            <Card className="overflow-hidden backdrop-blur-sm bg-card/80 border-border/50">
-                <CardHeader className="pb-3 flex flex-row items-baseline justify-between">
-                    <div>
-                        <CardTitle className="text-lg">Lagerbestand</CardTitle>
-                        <p className="text-sm text-muted-foreground mt-1">
-                            Tippe auf ein Produkt zum Ein- oder Auslagern
-                        </p>
-                        {editStatus && (
-                            <p className={`text-sm mt-1 font-medium ${editStatus.type === 'error' ? 'text-destructive' : 'text-success'}`}>
-                                {editStatus.message}
-                            </p>
-                        )}
-                        {quickStatus && !isEditing && (
-                            <p className={`text-sm mt-1 font-medium ${quickStatus.type === 'error' ? 'text-destructive' : 'text-success'}`}>
-                                {quickStatus.message}
-                            </p>
-                        )}
+            <div className="flex flex-col md:flex-row gap-6">
+                {/* Warehouse Sidebar */}
+                {availableWarehouses.length > 1 && (
+                    <div className="flex flex-col gap-2 w-full md:w-56 shrink-0 bg-card border rounded-xl p-2 h-fit">
+                        {availableWarehouses.map((wh) => {
+                            const WhIcon = wh.icon;
+                            const isActive = activeWarehouse === wh.id;
+                            return (
+                                <button
+                                    key={wh.id}
+                                    onClick={() => { setActiveWarehouse(wh.id); setIsEditing(false); setEditStatus(null); }}
+                                    className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 text-left ${isActive
+                                        ? 'bg-primary/10 text-primary'
+                                        : 'bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground'
+                                        }`}
+                                >
+                                    <WhIcon className="h-4 w-4 shrink-0" />
+                                    {wh.label}
+                                </button>
+                            );
+                        })}
                     </div>
-                    {(isAdmin || isLeadership) && (
-                        <div className="flex gap-2 relative top-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowScanner(true)}
-                                className="border-violet-500/30 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300"
-                            >
-                                <ScanLine className="h-4 w-4 mr-2" />
-                                Scanner
-                            </Button>
-                            {!isEditing ? (
-                                <Button variant="outline" size="sm" onClick={handleEditToggle}>
-                                    <Settings className="h-4 w-4 mr-2" />
-                                    Bearbeiten
-                                </Button>
-                            ) : (
-                                <>
-                                    <Button variant="ghost" size="sm" onClick={handleEditToggle} disabled={isSaving}>
-                                        <X className="h-4 w-4 mr-2" />
-                                        Abbrechen
-                                    </Button>
-                                    <Button size="sm" onClick={handleSave} disabled={isSaving}>
-                                        {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                                        Speichern
-                                    </Button>
-                                </>
-                            )}
-                        </div>
-                    )}
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 mt-4">
-                        {localItems.map((item, index) => (
-                            <div
-                                key={item.id}
-                                draggable={!isEditing}
-                                onDragStart={(e) => handleDragStart(e, index)}
-                                onDragOver={(e) => handleDragOver(e, index)}
-                                onDragEnd={handleDragEnd}
-                                className={`group relative flex flex-col p-2.5 rounded-lg border transition-all duration-200 ${!isEditing
-                                    ? 'cursor-grab active:cursor-grabbing border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
-                                    : 'border-border/50 bg-card cursor-default'
-                                    }`}
-                                style={{
-                                    opacity: draggedIdx === index ? 0.5 : 1,
-                                    transform: draggedIdx === index ? 'scale(0.98)' : 'scale(1)',
-                                }}
-                                onClick={() => {
-                                    if (!isEditing) setSelectedItem(item);
-                                }}
-                            >
-                                {!isEditing && (
-                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-40 transition-opacity pointer-events-none">
-                                        <GripHorizontal className="h-4 w-4" />
-                                    </div>
-                                )}
-                                {!isEditing && (
-                                    <div className="flex justify-end mb-1">
-                                        <Badge variant={item.quantity > 0 ? (item.quantity > 10 ? 'success' : 'warning') : 'destructive'} className="px-1.5 py-0 text-[10px] h-5">
-                                            {item.quantity}
-                                        </Badge>
-                                    </div>
-                                )}
+                )}
 
-                                <div className="flex-1 mb-1">
-                                    <h3 className={`font-semibold text-xs leading-tight line-clamp-2 ${!isEditing ? 'group-hover:text-primary transition-colors' : ''}`}>
-                                        {item.product_name}
-                                    </h3>
-                                </div>
-
-                                {!isEditing && (
-                                    <div
-                                        className="mt-2 pt-2 border-t border-border/20 flex items-center justify-between gap-1"
-                                        onClick={(e) => e.stopPropagation()}
+                {/* Inventory Area */}
+                <div className="flex-1 min-w-0">
+                    <Card className="overflow-hidden backdrop-blur-sm bg-card/80 border-border/50">
+                        <CardHeader className="pb-3 flex flex-row items-baseline justify-between">
+                            <div>
+                                <CardTitle className="text-lg">Lagerbestand</CardTitle>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                    Tippe auf ein Produkt zum Ein- oder Auslagern
+                                </p>
+                                {editStatus && (
+                                    <p className={`text-sm mt-1 font-medium ${editStatus.type === 'error' ? 'text-destructive' : 'text-success'}`}>
+                                        {editStatus.message}
+                                    </p>
+                                )}
+                                {quickStatus && !isEditing && (
+                                    <p className={`text-sm mt-1 font-medium ${quickStatus.type === 'error' ? 'text-destructive' : 'text-success'}`}>
+                                        {quickStatus.message}
+                                    </p>
+                                )}
+                            </div>
+                            {(isAdmin || isLeadership) && (
+                                <div className="flex gap-2 relative top-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setShowScanner(true)}
+                                        className="border-violet-500/30 text-violet-400 hover:bg-violet-500/10 hover:text-violet-300"
                                     >
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="h-7 w-8 p-0 shrink-0 text-primary border-primary/20 hover:bg-primary/10 hover:text-primary transition-colors text-[11px]"
-                                            onClick={(e) => handleQuickTransaction(e, item, -1)}
-                                            disabled={item.quantity <= 0}
-                                            title="1 Auslagern"
-                                        >
-                                            -1
+                                        <ScanLine className="h-4 w-4 mr-2" />
+                                        Scanner
+                                    </Button>
+                                    {!isEditing ? (
+                                        <Button variant="outline" size="sm" onClick={handleEditToggle}>
+                                            <Settings className="h-4 w-4 mr-2" />
+                                            Bearbeiten
                                         </Button>
+                                    ) : (
+                                        <>
+                                            <Button variant="ghost" size="sm" onClick={handleEditToggle} disabled={isSaving}>
+                                                <X className="h-4 w-4 mr-2" />
+                                                Abbrechen
+                                            </Button>
+                                            <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                                                {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                                                Speichern
+                                            </Button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 mt-4">
+                                {localItems.map((item, index) => (
+                                    <div
+                                        key={item.id}
+                                        draggable={!isEditing}
+                                        onDragStart={(e) => handleDragStart(e, index)}
+                                        onDragOver={(e) => handleDragOver(e, index)}
+                                        onDragEnd={handleDragEnd}
+                                        className={`group relative flex flex-col p-2.5 rounded-lg border transition-all duration-200 ${!isEditing
+                                            ? 'cursor-grab active:cursor-grabbing border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
+                                            : 'border-border/50 bg-card cursor-default'
+                                            }`}
+                                        style={{
+                                            opacity: draggedIdx === index ? 0.5 : 1,
+                                            transform: draggedIdx === index ? 'scale(0.98)' : 'scale(1)',
+                                        }}
+                                        onClick={() => {
+                                            if (!isEditing) setSelectedItem(item);
+                                        }}
+                                    >
+                                        {!isEditing && (
+                                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-40 transition-opacity pointer-events-none">
+                                                <GripHorizontal className="h-4 w-4" />
+                                            </div>
+                                        )}
+                                        {!isEditing && (
+                                            <div className="flex justify-end mb-1">
+                                                <Badge variant={item.quantity > 0 ? (item.quantity > 10 ? 'success' : 'warning') : 'destructive'} className="px-1.5 py-0 text-[10px] h-5">
+                                                    {item.quantity}
+                                                </Badge>
+                                            </div>
+                                        )}
 
-                                        <div className="flex-1 relative">
-                                            <Input
-                                                className="h-7 text-center text-[10px] px-1 bg-secondary/30 focus:bg-background transition-colors"
-                                                placeholder="± Zahl ↵"
-                                                title="Zahl eingeben und Enter drücken (+ für Einlagern, - für Auslagern)"
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        const val = parseInt(e.currentTarget.value);
-                                                        if (!isNaN(val) && val !== 0) {
-                                                            handleQuickTransaction(e, item, val);
-                                                            e.currentTarget.value = '';
-                                                        }
-                                                    }
-                                                }}
-                                            />
+                                        <div className="flex-1 mb-1">
+                                            <h3 className={`font-semibold text-xs leading-tight line-clamp-2 ${!isEditing ? 'group-hover:text-primary transition-colors' : ''}`}>
+                                                {item.product_name}
+                                            </h3>
                                         </div>
 
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="h-7 w-8 p-0 shrink-0 text-success border-success/20 hover:bg-success/10 hover:text-success transition-colors text-[11px]"
-                                            onClick={(e) => handleQuickTransaction(e, item, 1)}
-                                            title="1 Einlagern"
-                                        >
-                                            +1
-                                        </Button>
-                                    </div>
-                                )}
-
-                                {isEditing && (
-                                    <div className="mt-2 pt-2 border-t border-border/50">
-                                        <div className="flex items-center justify-between gap-1">
-                                            <span className="text-[11px] text-muted-foreground">Bestand:</span>
-                                            <Input
-                                                type="number"
-                                                min="0"
-                                                value={edits[item.product_id] || ''}
-                                                onChange={(e) => setEdits({ ...edits, [item.product_id]: e.target.value })}
-                                                className="w-16 text-right h-7 text-xs px-2"
+                                        {!isEditing && (
+                                            <div
+                                                className="mt-2 pt-2 border-t border-border/20 flex items-center justify-between gap-1"
                                                 onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-7 w-8 p-0 shrink-0 text-primary border-primary/20 hover:bg-primary/10 hover:text-primary transition-colors text-[11px]"
+                                                    onClick={(e) => handleQuickTransaction(e, item, -1)}
+                                                    disabled={item.quantity <= 0}
+                                                    title="1 Auslagern"
+                                                >
+                                                    -1
+                                                </Button>
+
+                                                <div className="flex-1 relative">
+                                                    <Input
+                                                        className="h-7 text-center text-[10px] px-1 bg-secondary/30 focus:bg-background transition-colors"
+                                                        placeholder="± Zahl ↵"
+                                                        title="Zahl eingeben und Enter drücken (+ für Einlagern, - für Auslagern)"
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                const val = parseInt(e.currentTarget.value);
+                                                                if (!isNaN(val) && val !== 0) {
+                                                                    handleQuickTransaction(e, item, val);
+                                                                    e.currentTarget.value = '';
+                                                                }
+                                                            }
+                                                        }}
+                                                    />
+                                                </div>
+
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-7 w-8 p-0 shrink-0 text-success border-success/20 hover:bg-success/10 hover:text-success transition-colors text-[11px]"
+                                                    onClick={(e) => handleQuickTransaction(e, item, 1)}
+                                                    title="1 Einlagern"
+                                                >
+                                                    +1
+                                                </Button>
+                                            </div>
+                                        )}
+
+                                        {isEditing && (
+                                            <div className="mt-2 pt-2 border-t border-border/50">
+                                                <div className="flex items-center justify-between gap-1">
+                                                    <span className="text-[11px] text-muted-foreground">Bestand:</span>
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        value={edits[item.product_id] || ''}
+                                                        onChange={(e) => setEdits({ ...edits, [item.product_id]: e.target.value })}
+                                                        className="w-16 text-right h-7 text-xs px-2"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            {localItems.length === 0 && (
+                                <div className="text-center text-muted-foreground py-12 border-2 border-dashed border-border/50 rounded-xl mt-4">
+                                    <Package className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
+                                    <p>Keine Produkte im Lager</p>
+                                </div>
+                            )}
+
+                            {isEditing && (
+                                <div className="mt-6 p-4 bg-muted/50 rounded-lg space-y-4 border border-border/50">
+                                    <h3 className="font-semibold text-sm">Bestätigung & Grund</h3>
+                                    <div className="grid gap-4 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="editPersonName">Dein Name *</Label>
+                                            <Input
+                                                id="editPersonName"
+                                                placeholder="Wer macht die Anpassung?"
+                                                value={personName}
+                                                onChange={(e) => setPersonName(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="editReason">Grund</Label>
+                                            <Input
+                                                id="editReason"
+                                                placeholder="Optional (z.B. Inventur)"
+                                                value={reason}
+                                                onChange={(e) => setReason(e.target.value)}
                                             />
                                         </div>
                                     </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                    {localItems.length === 0 && (
-                        <div className="text-center text-muted-foreground py-12 border-2 border-dashed border-border/50 rounded-xl mt-4">
-                            <Package className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
-                            <p>Keine Produkte im Lager</p>
-                        </div>
-                    )}
-
-                    {isEditing && (
-                        <div className="mt-6 p-4 bg-muted/50 rounded-lg space-y-4 border border-border/50">
-                            <h3 className="font-semibold text-sm">Bestätigung & Grund</h3>
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label htmlFor="editPersonName">Dein Name *</Label>
-                                    <Input
-                                        id="editPersonName"
-                                        placeholder="Wer macht die Anpassung?"
-                                        value={personName}
-                                        onChange={(e) => setPersonName(e.target.value)}
-                                    />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="editReason">Grund</Label>
-                                    <Input
-                                        id="editReason"
-                                        placeholder="Optional (z.B. Inventur)"
-                                        value={reason}
-                                        onChange={(e) => setReason(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
 
-            {/* Transaction Dialog */}
-            {selectedItem && (
-                <TransactionDialog
-                    item={selectedItem}
-                    warehouseId={warehouseId}
-                    user={user}
-                    onClose={() => setSelectedItem(null)}
-                />
-            )}
-
-            {/* Inventory Scanner Overlay */}
-            {showScanner && (
-                <Suspense fallback={
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                }>
-                    <InventoryScanner
-                        warehouseItems={warehouseItems}
+                {/* Transaction Dialog */}
+                {selectedItem && (
+                    <TransactionDialog
+                        item={selectedItem}
                         warehouseId={warehouseId}
                         user={user}
-                        onClose={() => setShowScanner(false)}
+                        onClose={() => setSelectedItem(null)}
                     />
-                </Suspense>
-            )}
+                )}
+
+                {/* Inventory Scanner Overlay */}
+                {showScanner && (
+                    <Suspense fallback={
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                    }>
+                        <InventoryScanner
+                            warehouseItems={warehouseItems}
+                            warehouseId={warehouseId}
+                            user={user}
+                            onClose={() => setShowScanner(false)}
+                        />
+                    </Suspense>
+                )}
+            </div>
         </div>
     );
 }

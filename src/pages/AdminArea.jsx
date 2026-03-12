@@ -1137,10 +1137,10 @@ function ProductManagement() {
                                     key={w.id}
                                     onClick={() => toggleWarehouse(w.id)}
                                     className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border ${selectedWarehouses.includes(w.id)
-                                            ? w.type === 'leadership'
-                                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                                                : 'bg-primary/15 text-primary border-primary/30'
-                                            : 'bg-transparent text-muted-foreground border-border/50 opacity-50 hover:opacity-80'
+                                        ? w.type === 'leadership'
+                                            ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                            : 'bg-primary/15 text-primary border-primary/30'
+                                        : 'bg-transparent text-muted-foreground border-border/50 opacity-50 hover:opacity-80'
                                         }`}
                                 >
                                     {w.name}
@@ -1236,10 +1236,10 @@ function ProductManagement() {
                                             key={w.id}
                                             onClick={() => toggleProductWarehouse(p.id, w.id, p.warehouseIds || [])}
                                             className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all border ${isAssigned
-                                                    ? w.type === 'leadership'
-                                                        ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                                                        : 'bg-primary/15 text-primary border-primary/30'
-                                                    : 'bg-transparent text-muted-foreground/40 border-border/30 hover:text-muted-foreground hover:border-border/50'
+                                                ? w.type === 'leadership'
+                                                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                                    : 'bg-primary/15 text-primary border-primary/30'
+                                                : 'bg-transparent text-muted-foreground/40 border-border/30 hover:text-muted-foreground hover:border-border/50'
                                                 }`}
                                         >
                                             {w.type === 'leadership' ? 'Führung' : 'Normal'}
@@ -1264,8 +1264,8 @@ function ProductManagement() {
                             <button
                                 onClick={() => deleteProduct(p.id, p.name)}
                                 className={`p-1.5 rounded-lg transition-all shrink-0 ${deleting === p.id
-                                        ? 'bg-destructive text-destructive-foreground'
-                                        : 'text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100'
+                                    ? 'bg-destructive text-destructive-foreground'
+                                    : 'text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100'
                                     }`}
                                 title={deleting === p.id ? 'Nochmal klicken zum Löschen' : 'Löschen'}
                             >
@@ -1407,33 +1407,35 @@ export default function AdminArea({ initialTab = 'roles' }) {
                 <p className="text-muted-foreground mt-1">Benutzerverwaltung, Logs und System-Monitoring</p>
             </div>
 
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList>
-                    <TabsTrigger value="roles">Rollenverwaltung</TabsTrigger>
-                    <TabsTrigger value="products">Produkte</TabsTrigger>
-                    <TabsTrigger value="logs">System-Logs</TabsTrigger>
-                    <TabsTrigger value="console">Konsole</TabsTrigger>
-                    <TabsTrigger value="wsmonitor">WS Monitor</TabsTrigger>
-                    <TabsTrigger value="settings">System-Einst.</TabsTrigger>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col md:flex-row gap-6">
+                <TabsList className="flex flex-col h-auto bg-card border justify-start w-full md:w-56 overflow-hidden rounded-xl">
+                    <TabsTrigger value="roles" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">Rollenverwaltung</TabsTrigger>
+                    <TabsTrigger value="products" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">Produkte</TabsTrigger>
+                    <TabsTrigger value="logs" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">System-Logs</TabsTrigger>
+                    <TabsTrigger value="console" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">Konsole</TabsTrigger>
+                    <TabsTrigger value="wsmonitor" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">WS Monitor</TabsTrigger>
+                    <TabsTrigger value="settings" className="justify-start px-4 py-3 w-full data-[state=active]:bg-primary/10 data-[state=active]:text-primary">System-Einst.</TabsTrigger>
                 </TabsList>
-                <TabsContent value="roles">
-                    <RoleManagement />
-                </TabsContent>
-                <TabsContent value="products">
-                    <ProductManagement />
-                </TabsContent>
-                <TabsContent value="logs">
-                    <LogPage />
-                </TabsContent>
-                <TabsContent value="console">
-                    <ServerConsole />
-                </TabsContent>
-                <TabsContent value="wsmonitor">
-                    <WsMonitor />
-                </TabsContent>
-                <TabsContent value="settings">
-                    <SettingsManagement />
-                </TabsContent>
+                <div className="flex-1 min-w-0">
+                    <TabsContent value="roles" className="mt-0">
+                        <RoleManagement />
+                    </TabsContent>
+                    <TabsContent value="products" className="mt-0">
+                        <ProductManagement />
+                    </TabsContent>
+                    <TabsContent value="logs" className="mt-0">
+                        <LogPage />
+                    </TabsContent>
+                    <TabsContent value="console" className="mt-0">
+                        <ServerConsole />
+                    </TabsContent>
+                    <TabsContent value="wsmonitor" className="mt-0">
+                        <WsMonitor />
+                    </TabsContent>
+                    <TabsContent value="settings" className="mt-0">
+                        <SettingsManagement />
+                    </TabsContent>
+                </div>
             </Tabs>
         </div>
     );
