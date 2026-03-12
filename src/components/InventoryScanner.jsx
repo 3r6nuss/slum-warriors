@@ -159,6 +159,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     const [applyStatus, setApplyStatus] = useState(null);
     const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
 
+    // Modes
+    const [isAddMode, setIsAddMode] = useState(false);
+
     // Drag state
     const [dragging, setDragging] = useState(null); // 'move' | 'resize' | null
     const [dragStart, setDragStart] = useState(null);
@@ -376,11 +379,11 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                 if (existIdx >= 0) {
                     const match = bestMatch(item.name, productNames);
                     const wi = match ? warehouseItems.find(w => w.product_name === match) : null;
-                    if (wi && !wi.is_stackable) {
-                        // Sum quantities for non-stackable items
+                    if ((wi && !wi.is_stackable) || isAddMode) {
+                        // Sum quantities for non-stackable items, or if global Add Mode is active
                         accumResults[existIdx] = { ...item, quantity: accumResults[existIdx].quantity + item.quantity };
                     } else {
-                        // Overwrite for stackable items (latest scan wins)
+                        // Overwrite for stackable items
                         accumResults[existIdx] = item;
                     }
                 } else {
@@ -396,11 +399,17 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
             const matched = accumResults.map(item => {
                 const match = bestMatch(item.name, productNames);
                 const wi = match ? warehouseItems.find(w => w.product_name === match) : null;
+
+                let targetQty = item.quantity;
+                if (isAddMode && wi) {
+                    targetQty = wi.quantity + item.quantity;
+                }
+
                 return {
-                    ocrName: item.name, ocrQuantity: item.quantity,
+                    ocrName: item.name, ocrQuantity: targetQty,
                     matchedName: match, matchedItem: wi,
                     currentQuantity: wi?.quantity ?? null,
-                    diff: wi ? item.quantity - wi.quantity : null,
+                    diff: wi ? targetQty - wi.quantity : null,
                     accepted: !!match,
                 };
             });
@@ -460,6 +469,48 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                 : { type: 'error', message: data.error || 'Fehler.' });
         } catch { setApplyStatus({ type: 'error', message: 'Verbindungsfehler.' }); }
         setApplying(false);
+    };
+
+    const zeroOutUnscanned = (idx, e) => {
+        if (e) e.stopPropagation();
+        setScanResults(prev => {
+            if (!prev) return prev;
+            const u = [...prev.unscanned];
+            const itemToZero = u[idx];
+            u.splice(idx, 1);
+
+            const matchedItem = {
+                ocrName: 'Manuell genullt', ocrQuantity: 0,
+                matchedName: itemToZero.matchedName, matchedItem: itemToZero.matchedItem,
+                currentQuantity: itemToZero.currentQuantity, diff: -itemToZero.currentQuantity,
+                accepted: true
+            };
+
+            return {
+                ...prev,
+                matched: [...prev.matched, matchedItem],
+                unscanned: u
+            };
+        });
+    };
+
+    const zeroAllUnscanned = () => {
+        setScanResults(prev => {
+            if (!prev || !prev.unscanned || prev.unscanned.length === 0) return prev;
+
+            const newMatched = prev.unscanned.map(itemToZero => ({
+                ocrName: 'Manuell genullt', ocrQuantity: 0,
+                matchedName: itemToZero.matchedName, matchedItem: itemToZero.matchedItem,
+                currentQuantity: itemToZero.currentQuantity, diff: -itemToZero.currentQuantity,
+                accepted: true
+            }));
+
+            return {
+                ...prev,
+                matched: [...prev.matched, ...newMatched],
+                unscanned: []
+            };
+        });
     };
 
     const adjustQuantity = (idx, delta, e) => {
@@ -824,7 +875,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                                         : <span className="text-muted-foreground italic text-xs">—</span>}
                                                 </td>
                                                 <td className="p-2.5 text-right font-mono font-semibold text-xs">
-                                                    {row.matchedItem && !row.matchedItem.is_stackable ? (
+                                                    {row.matchedItem ? (
                                                         <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
                                                             <button
                                                                 className="h-5 w-5 rounded bg-secondary/50 hover:bg-secondary flex items-center justify-center text-muted-foreground transition-colors"
@@ -855,12 +906,17 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                         {scanResults.unscanned?.length > 0 && (
                                             <>
                                                 <tr>
-                                                    <td colSpan={6} className="p-2 bg-secondary/30 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+                                                    <td colSpan={5} className="p-2 bg-secondary/30 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
                                                         Noch nicht gescannt
+                                                    </td>
+                                                    <td className="p-2 bg-secondary/30 text-right">
+                                                        <Button variant="ghost" size="sm" onClick={zeroAllUnscanned} className="h-6 text-xs text-destructive hover:text-white hover:bg-destructive transition-colors px-2">
+                                                            Alle Nullen
+                                                        </Button>
                                                     </td>
                                                 </tr>
                                                 {scanResults.unscanned.map((row, idx) => (
-                                                    <tr key={`u-${idx}`} className="border-b border-border/30 opacity-40">
+                                                    <tr key={`u-${idx}`} className="border-b border-border/30 opacity-40 hover:opacity-100 transition-opacity">
                                                         <td className="p-2" />
                                                         <td className="p-2 text-muted-foreground italic text-xs">—</td>
                                                         <td className="p-2 text-muted-foreground text-xs">{row.matchedName}</td>
@@ -868,7 +924,11 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                                         <td className="p-2 text-right font-mono text-muted-foreground text-xs">
                                                             {row.currentQuantity?.toLocaleString('de-DE')}
                                                         </td>
-                                                        <td className="p-2 text-right text-xs text-muted-foreground">—</td>
+                                                        <td className="p-2 text-right text-xs text-muted-foreground">
+                                                            <Button variant="outline" size="sm" className="h-6 w-full text-xs hover:bg-destructive hover:text-white hover:border-destructive" onClick={(e) => zeroOutUnscanned(idx, e)}>
+                                                                0 setzen
+                                                            </Button>
+                                                        </td>
                                                     </tr>
                                                 ))}
                                             </>
