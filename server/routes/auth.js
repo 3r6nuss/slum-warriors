@@ -178,7 +178,7 @@ router.post('/logout', (req, res) => {
 // ---- Admin Routes ----
 
 // Middleware: require admin role
-function requireAdmin(req, res, next) {
+export function requireAdmin(req, res, next) {
     if (!req.session.user || req.session.user.role !== 'admin') {
         return res.status(403).json({ error: 'Zugriff verweigert – nur für Admins' });
     }

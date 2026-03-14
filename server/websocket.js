@@ -77,4 +77,4 @@ function broadcastInventory() {
     });
 }
 
-export { setupWebSocket, broadcastInventory, getConnectedCount };
+export { setupWebSocket, broadcastInventory, getConnectedCount, getFullInventory };
