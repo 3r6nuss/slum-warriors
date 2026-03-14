@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectOption } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -237,13 +237,17 @@ function RoleManagement() {
                                             <Select
                                                 value={u.role}
                                                 onValueChange={(newRole) => changeRole(u.id, newRole)}
-                                                className="w-36"
                                             >
-                                                {Object.entries(ROLE_CONFIG)
-                                                    .filter(([key]) => key !== 'pending')
-                                                    .map(([key, cfg]) => (
-                                                        <SelectOption key={key} value={key}>{cfg.label}</SelectOption>
-                                                    ))}
+                                                <SelectTrigger className="w-36">
+                                                    <SelectValue placeholder="Rolle" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {Object.entries(ROLE_CONFIG)
+                                                        .filter(([key]) => key !== 'pending')
+                                                        .map(([key, cfg]) => (
+                                                            <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+                                                        ))}
+                                                </SelectContent>
                                             </Select>
                                         )}
                                     </TableCell>

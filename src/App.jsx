@@ -2,12 +2,15 @@ import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useParams } 
 import { useState } from 'react';
 import {
   User, Menu, Swords, Shield, Warehouse,
-  ShieldCheck, LogOut, Users, Package, FileText, Terminal, Activity, Settings
+  ShieldCheck, LogOut, Users, Package, FileText, Terminal, Activity, Settings,
+  History, BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import WarehouseView from '@/pages/WarehouseView';
 import AdminArea from '@/pages/AdminArea';
+import StatsView from '@/pages/StatsView';
+import LogView from '@/pages/LogView';
 import { LoginPage, AuthCallback, PendingPage } from '@/pages/Login';
 
 function UserProfile() {
@@ -103,6 +106,9 @@ function Sidebar({ open, onClose }) {
               <NavLink to="/lager/3" onClick={onClose} className={navLinkStyle}>
                 <Warehouse className="h-4 w-4" /> Waffenlager
               </NavLink>
+              <NavLink to="/stats" onClick={onClose} className={navLinkStyle}>
+                <BarChart3 className="h-4 w-4" /> Statistiken
+              </NavLink>
             </div>
           </div>
 
@@ -120,6 +126,9 @@ function Sidebar({ open, onClose }) {
                 </NavLink>
                 <NavLink to="/lager/4" onClick={onClose} className={navLinkStyle}>
                   <Shield className="h-4 w-4" /> Führungs-Waffen
+                </NavLink>
+                <NavLink to="/logs" onClick={onClose} className={navLinkStyle}>
+                  <History className="h-4 w-4" /> Lager-Historie
                 </NavLink>
               </div>
             </div>
@@ -208,6 +217,8 @@ function AppShell() {
             <Route path="/" element={<Navigate to="/lager/2" replace />} />
             <Route path="/lager" element={<Navigate to="/lager/2" replace />} />
             <Route path="/lager/:id" element={<WarehouseView />} />
+            <Route path="/stats" element={<StatsView />} />
+            <Route path="/logs" element={<LogView />} />
             <Route path="/admin" element={<Navigate to="/admin/roles" replace />} />
             <Route path="/admin/:tab" element={<AdminArea />} />
           </Routes>
