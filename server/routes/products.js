@@ -165,4 +165,30 @@ router.delete('/:id', (req, res) => {
     }
 });
 
+// PUT /api/products/bulk/warehouses - batch assign warehouses to all products
+router.put('/bulk/warehouses', (req, res) => {
+    const { warehouseIds } = req.body;
+    if (!Array.isArray(warehouseIds)) {
+        return res.status(400).json({ error: 'warehouseIds must be an array' });
+    }
+
+    try {
+        const products = db.prepare('SELECT id FROM products').all();
+        const insertInv = db.prepare('INSERT OR IGNORE INTO inventory (warehouse_id, product_id, quantity) VALUES (?, ?, 0)');
+
+        const transaction = db.transaction(() => {
+            for (const prod of products) {
+                for (const wid of warehouseIds) {
+                    insertInv.run(wid, prod.id);
+                }
+            }
+        });
+
+        transaction();
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

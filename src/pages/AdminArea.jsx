@@ -1081,6 +1081,61 @@ function ProductManagement() {
         }
     };
 
+    const assignSelectedWarehousesToProduct = async (productId) => {
+        if (selectedWarehouses.length === 0) {
+            setStatus({ type: 'error', message: 'Bitte wähle zuerst oben mindestens ein Lager aus.' });
+            return;
+        }
+
+        // Optimistic update
+        setProducts(products.map(p => p.id === productId ? { ...p, warehouseIds: selectedWarehouses } : p));
+
+        try {
+            const res = await fetch(`/api/products/${productId}/warehouses`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ warehouseIds: selectedWarehouses })
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Fehler beim Speichern');
+            }
+        } catch (err) {
+            setStatus({ type: 'error', message: err.message });
+            loadData();
+        }
+    };
+
+    const bulkAssignWarehouses = async () => {
+        if (selectedWarehouses.length === 0) {
+            setStatus({ type: 'error', message: 'Bitte wähle mindestens ein Lager für die Massenzuweisung aus.' });
+            return;
+        }
+
+        if (!confirm('Möchtest du wirklich ALLE Produkte den ausgewählten Lagern zuweisen? Fehlende Zuordnungen werden ergänzt.')) return;
+
+        try {
+            setStatus({ type: 'success', message: 'Massen-Zuweisung läuft...' });
+            const res = await fetch('/api/products/bulk/warehouses', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ warehouseIds: selectedWarehouses })
+            });
+            if (res.ok) {
+                setStatus({ type: 'success', message: 'Alle Produkte wurden den ausgewählten Lagern zugewiesen.' });
+                loadData();
+            } else {
+                const data = await res.json();
+                setStatus({ type: 'error', message: data.error || 'Fehler bei der Massenzuweisung' });
+            }
+        } catch (err) {
+            setStatus({ type: 'error', message: 'Fehler bei der Massenzuweisung' });
+        }
+    };
+
     const toggleStackable = async (productId, currentValue) => {
         const newValue = !currentValue;
         // Optimistic update
@@ -1168,6 +1223,17 @@ function ProductManagement() {
                             <Plus className="h-3.5 w-3.5" />
                             Hinzufügen
                         </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={bulkAssignWarehouses}
+                            disabled={selectedWarehouses.length === 0 || products.length === 0}
+                            size="sm"
+                            className="gap-1.5 ml-auto bg-primary/10 text-primary hover:bg-primary/20"
+                            title="Alle Produkte den aktuell ausgewählten Lagern zuweisen"
+                        >
+                            <Warehouse className="h-3.5 w-3.5" />
+                            Alle Zuweisen
+                        </Button>
                     </div>
                 </div>
 
@@ -1218,13 +1284,17 @@ function ProductManagement() {
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-2">
+                                    <div
+                                        className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+                                        onClick={() => assignSelectedWarehousesToProduct(p.id)}
+                                        title="Klicken, um diesem Produkt die oben markierten Lager zuzuweisen"
+                                    >
                                         <Package className="h-4 w-4 text-muted-foreground/60 shrink-0" />
                                         <span className="font-medium text-sm truncate">{p.name}</span>
                                         <span className="font-mono text-[10px] text-muted-foreground/40">#{p.id}</span>
                                         <button
                                             className="p-1 rounded text-muted-foreground/30 hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-all"
-                                            onClick={() => setEditingProduct({ id: p.id, name: p.name })}
+                                            onClick={(e) => { e.stopPropagation(); setEditingProduct({ id: p.id, name: p.name }); }}
                                         >
                                             <Pencil className="h-3 w-3" />
                                         </button>
