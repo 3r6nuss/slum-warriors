@@ -1,11 +1,10 @@
-const { WebSocketServer } = require('ws');
-const db = require('./db');
-const { log } = require('./logger');
+import { WebSocketServer, WebSocket } from 'ws';
+import db from './db.js';
+import { log } from './logger.js';
 
 let wss = null;
-let statsInterval = null;
 
-function initWebSocket(server) {
+function setupWebSocket(server) {
     wss = new WebSocketServer({ server });
 
     wss.on('connection', (ws) => {
@@ -21,7 +20,7 @@ function initWebSocket(server) {
     });
 
     // Record WS connection count every 5 minutes
-    statsInterval = setInterval(() => {
+    setInterval(() => {
         const count = getConnectedCount();
         try {
             db.prepare(
@@ -36,9 +35,8 @@ function initWebSocket(server) {
     // Record an initial snapshot on startup
     try {
         db.prepare(
-            'INSERT INTO ws_connection_stats (connected_clients) VALUES (?)'
         ).run(0);
-    } catch (_) { /* ignore */ }
+    } catch { /* ignore */ }
 
     log('WS', 'WebSocket server initialized');
 }
@@ -79,4 +77,4 @@ function broadcastInventory() {
     });
 }
 
-module.exports = { initWebSocket, broadcastInventory, getFullInventory, getConnectedCount };
+export { setupWebSocket, broadcastInventory, getConnectedCount };

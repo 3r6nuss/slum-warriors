@@ -1,8 +1,8 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
-const { broadcastInventory } = require('../websocket');
-const { sendSystemAlert } = require('../lib/discord');
+import express from 'express';
+export const router = express.Router();
+import db from '../db.js';
+import { broadcastInventory } from '../websocket.js';
+import { sendSystemAlert } from '../lib/discord.js';
 
 // POST /api/adjustments/batch - bulk inventory update logging entire warehouse state
 router.post('/batch', (req, res) => {
@@ -230,4 +230,4 @@ router.get('/', (req, res) => {
     res.json(adjustments);
 });
 
-module.exports = router;
+export default router;

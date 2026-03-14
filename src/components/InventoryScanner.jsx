@@ -64,27 +64,7 @@ function parseGermanNumber(str) {
     return isNaN(num) || num < 0 ? 0 : num;
 }
 
-/* ── Parse cell text into quantity + name ─────────────────────── */
-function parseCellText(text) {
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    let quantity = null;
-    let nameParts = [];
-    for (const line of lines) {
-        if (/^[\d.,]+$/.test(line)) {
-            const num = parseGermanNumber(line);
-            if (num > 0 && quantity === null) quantity = num;
-        } else {
-            const m = line.match(/^([\d.,]+)\s+(.+)$/);
-            if (m && quantity === null) {
-                const num = parseGermanNumber(m[1]);
-                if (num > 0) { quantity = num; if (m[2].trim().length >= 2) nameParts.push(m[2].trim()); }
-            } else if (/[a-zA-ZäöüÄÖÜß]/.test(line) && line.length >= 2) {
-                nameParts.push(line);
-            }
-        }
-    }
-    return { quantity, name: nameParts.join(' ').trim() || null };
-}
+
 
 /* ── Crop & Preprocess helper ─────────────────────────────────── */
 function preprocessCrop(canvas, x, y, w, h) {
@@ -160,7 +140,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
 
     // Modes
-    const [isAddMode, setIsAddMode] = useState(false);
+    const [isAddMode] = useState(false);
 
     // Drag state
     const [dragging, setDragging] = useState(null); // 'move' | 'resize' | null
@@ -370,7 +350,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
 
                         // Clean up common OCR artifacts
                         const nameText = nameResult.data.text
-                            .replace(/[\|\>\<\'\”\"\`\_\-\~]/g, ' ')
+                            .replace(/[|><'"”`_~-]/g, ' ')
                             .replace(/\s+/g, ' ')
                             .trim();
 
@@ -462,12 +442,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         }
     };
 
-    /* ── Load next screenshot (keep grid + results) ───────────── */
-    const loadNextScreenshot = () => {
-        setImagePreview(null);
-        setImgNaturalSize(null);
-        // Keep: gridPos, numCols, numRows, allResults, scanResults
-    };
+
 
     /* ── Apply ────────────────────────────────────────────────── */
     const applyResults = async () => {

@@ -1,9 +1,9 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
-const https = require('https');
-const querystring = require('querystring');
-const { sendSystemAlert } = require('../lib/discord');
+import express from 'express';
+export const router = express.Router();
+import db from '../db.js';
+import https from 'https';
+import querystring from 'querystring';
+import { sendSystemAlert } from '../lib/discord.js';
 
 // Discord OAuth2 Config
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1477714942647079074';
@@ -20,7 +20,7 @@ function httpsRequest(url, options, postData) {
             res.on('end', () => {
                 try {
                     resolve(JSON.parse(data));
-                } catch (e) {
+                } catch {
                     reject(new Error('Failed to parse response: ' + data));
                 }
             });
@@ -310,5 +310,4 @@ router.put('/users/:id/display-name', requireAdmin, (req, res) => {
     res.json({ success: true, message: `Klarname auf "${trimmedName || '(entfernt)'}" gesetzt` });
 });
 
-module.exports = router;
-module.exports.requireAdmin = requireAdmin;
+export default router;

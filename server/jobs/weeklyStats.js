@@ -1,5 +1,6 @@
-const db = require('../db');
-const { sendSystemAlert } = require('../lib/discord');
+import cron from 'node-cron';
+import db from '../db.js';
+import { sendSystemAlert } from '../lib/discord.js';
 
 function compileAndSendStats() {
     try {
@@ -62,28 +63,16 @@ function compileAndSendStats() {
     }
 }
 
-let lastRunDate = null;
-
-function checkWeeklyStats() {
-    const now = new Date();
-    // Run on Sunday (0) at 23:00 local time
-    if (now.getDay() === 0 && now.getHours() === 23) {
-        const todayStr = now.toDateString();
-        // Ensure it only runs once per cycle
-        if (lastRunDate !== todayStr) {
-            compileAndSendStats();
-            lastRunDate = todayStr;
-        }
-    }
+function startWeeklyStatsJob() {
+    // Schedule to run every Sunday at 23:00 (11 PM)
+    cron.schedule('0 23 * * 0', () => {
+        console.log('[Jobs] Running weekly stats compilation...');
+        compileAndSendStats();
+    }, {
+        timezone: "Europe/Berlin" // Or your desired timezone
+    });
+    console.log('[Jobs] Weekly Stats Scheduler started. Next run: Sunday 23:00.');
 }
 
-function startStatsJob() {
-    // Check every hour
-    setInterval(checkWeeklyStats, 1000 * 60 * 60);
-    console.log('[Jobs] Weekly Stats Scheduler started.');
-}
-
-module.exports = {
-    startStatsJob,
-    compileAndSendStats, // export for manual triggering if needed
-};
+export { compileAndSendStats };
+export default startWeeklyStatsJob;

@@ -20,7 +20,7 @@ export function AuthCallback() {
         } else {
             navigate('/login?error=no_code');
         }
-    }, []);
+    }, [searchParams, handleCallback, navigate]);
 
     return (
         <div className="min-h-screen flex items-center justify-center">
@@ -43,7 +43,7 @@ export function LoginPage() {
 
     useEffect(() => {
         if (isLoggedIn) navigate('/');
-    }, [isLoggedIn]);
+    }, [isLoggedIn, navigate]);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -96,7 +96,7 @@ export function PendingPage() {
         if (!isPending) {
             navigate('/');
         }
-    }, [isPending]);
+    }, [isPending, navigate]);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">

@@ -1,4 +1,5 @@
-const db = require('../db');
+import db from '../db.js';
+import fetch from 'node-fetch';
 
 /**
  * Sends a message/embed to the configured Discord webhook.
@@ -44,7 +45,7 @@ async function sendSystemAlert(title, description, color = 0x3498db) {
     });
 }
 
-module.exports = {
+export {
     sendDiscordAlert,
     sendSystemAlert,
 };

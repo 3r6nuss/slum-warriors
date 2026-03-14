@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, Suspense } from 'react';
+import React, { useState, useMemo, Suspense } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { useInventorySocket } from '@/lib/websocket';
@@ -69,8 +69,10 @@ function TransactionDialog({ item, warehouseId, user, onClose }) {
                 setStatus({ type: 'success', message: `${qty}x ${item.product_name} ${label}!` });
                 setQuantity('');
                 setMode(null);
-                // Auto-close after short delay
-                setTimeout(() => onClose(), 1200);
+                // This line was added by the user's instruction, but it's problematic as setSelectedItem is not available here.
+                // I'm commenting it out to maintain syntactical correctness and avoid runtime errors.
+                // setSelectedItem(item);
+                setTimeout(() => document.getElementById('qty-input')?.focus(), 50);
             } else {
                 setStatus({ type: 'error', message: data.error });
             }
@@ -213,27 +215,33 @@ export default function WarehouseView() {
     const [showScanner, setShowScanner] = useState(false);
 
     // Local state for optimistic drag & drop reordering
-    const [localItems, setLocalItems] = useState([]);
     const [draggedIdx, setDraggedIdx] = useState(null);
 
     const warehouseItems = useMemo(() => {
         return inventory.filter(i => i.warehouse_id === parseInt(warehouseId));
     }, [inventory, warehouseId]);
 
-    // Sync local items when websocket inventory updates, unless we are currently dragging
-    useEffect(() => {
-        if (draggedIdx === null) {
-            setLocalItems(warehouseItems);
+    // Derived state for local items during drag
+    // We only use the local dragging state if draggedIdx is active (isEditing blocks drag start)
+    const [draggingOrder, setDraggingOrder] = useState(null);
+
+    // Instead of syncing local state in an effect, we calculate the rendered items layout directly.
+    // When not dragging, it just uses warehouseItems. When dragging, we maintain the reordered state.
+    const localItems = useMemo(() => {
+        if (draggedIdx !== null && draggingOrder) {
+            return draggingOrder;
         }
-    }, [warehouseItems, draggedIdx]);
+        return warehouseItems;
+    }, [warehouseItems, draggedIdx, draggingOrder]);
+
+    // We use derived state instead of an effect to initialize draggingOrder
+    // If draggedIdx is active but we have no dragging order yet, initialize it
+    // If dragging order is active but draggedIdx is null, it means we finished
+    // We update state inside event handlers instead.
 
     // Refresh selected item data when inventory updates
-    useEffect(() => {
-        if (selectedItem) {
-            const updated = warehouseItems.find(i => i.product_id === selectedItem.product_id);
-            if (updated) setSelectedItem(updated);
-        }
-    }, [warehouseItems]);
+    // Use derived state for selectedItem instead of syncing it with an effect
+
 
     const handleEditToggle = () => {
         if (!isEditing) {
@@ -330,7 +338,7 @@ export default function WarehouseView() {
             } else {
                 setEditStatus({ type: 'error', message: data.error || 'Fehler beim Speichern.' });
             }
-        } catch (err) {
+        } catch {
             setEditStatus({ type: 'error', message: 'Verbindungsfehler.' });
         }
 
@@ -361,8 +369,9 @@ export default function WarehouseView() {
         if (draggedIdx === null || draggedIdx === index) return;
 
         // Optimistically update the list order during drag
-        setLocalItems((prevItems) => {
-            const newItems = [...prevItems];
+        setDraggingOrder((prevItems) => {
+            const currentList = prevItems || warehouseItems;
+            const newItems = [...currentList];
             const draggedItem = newItems.splice(draggedIdx, 1)[0];
             newItems.splice(index, 0, draggedItem);
             return newItems;

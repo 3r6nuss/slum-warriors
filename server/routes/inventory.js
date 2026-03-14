@@ -1,7 +1,7 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
-const { getFullInventory } = require('../websocket');
+import express from 'express';
+export const router = express.Router();
+import db from '../db.js';
+import { getFullInventory, broadcastInventory } from '../websocket.js';
 
 // GET /api/inventory – full inventory
 router.get('/', (req, res) => {
@@ -32,7 +32,7 @@ router.get('/:warehouseId', (req, res) => {
 });
 
 // PUT /api/inventory/:warehouseId/reorder – update inventory sort_order for a specific warehouse
-router.put('/:warehouseId/reorder', (req, res) => {
+router.put('/:warehouseId/reorder', async (req, res) => {
   const { warehouseId } = req.params;
   const { order } = req.body; // array of { product_id, sort_order }
 
@@ -56,7 +56,7 @@ router.put('/:warehouseId/reorder', (req, res) => {
     res.json({ success: true });
 
     // Broadcast the new, full inventory with updated order
-    const { broadcastInventory } = require('../websocket');
+    await import('../lib/discord.js');
     broadcastInventory();
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -69,4 +69,4 @@ router.get('/warehouses/list', (req, res) => {
   res.json(warehouses);
 });
 
-module.exports = router;
+export default router;

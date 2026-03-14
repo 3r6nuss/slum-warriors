@@ -1,8 +1,8 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
-const { broadcastInventory } = require('../websocket');
-const { sendSystemAlert } = require('../lib/discord');
+import express from 'express';
+export const router = express.Router();
+import db from '../db.js';
+import { broadcastInventory } from '../websocket.js';
+import { sendSystemAlert } from '../lib/discord.js';
 
 // POST /api/transactions – create check-in or check-out
 router.post('/', (req, res) => {
@@ -145,4 +145,4 @@ router.get('/person/:name', (req, res) => {
     res.json(transactions);
 });
 
-module.exports = router;
+export default router;

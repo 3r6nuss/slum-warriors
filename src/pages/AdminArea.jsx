@@ -9,10 +9,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/lib/auth';
 import {
-    ShieldCheck, Users, ScrollText, Crown, Shield, User, Eye,
-    CheckCircle, AlertCircle, Swords, Clock, UserCheck, UserX,
+    ShieldCheck, Users, Crown, Shield, User, Eye,
+    CheckCircle, AlertCircle, Swords, Clock,
     Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi,
-    Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Send, Loader2,
+    Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Loader2,
     GripVertical, Layers, Warehouse
 } from 'lucide-react';
 
@@ -59,7 +59,7 @@ function RoleManagement() {
             } else {
                 setStatus({ type: 'error', message: data.error });
             }
-        } catch (err) {
+        } catch {
             setStatus({ type: 'error', message: 'Fehler beim Ändern der Rolle' });
         }
     };
@@ -79,7 +79,7 @@ function RoleManagement() {
             } else {
                 setStatus({ type: 'error', message: data.error });
             }
-        } catch (err) {
+        } catch {
             setStatus({ type: 'error', message: 'Fehler beim Freischalten' });
         }
     };
@@ -98,7 +98,7 @@ function RoleManagement() {
             } else {
                 setStatus({ type: 'error', message: data.error });
             }
-        } catch (err) {
+        } catch {
             setStatus({ type: 'error', message: 'Fehler beim Zurücksetzen' });
         }
     };
@@ -119,7 +119,7 @@ function RoleManagement() {
             } else {
                 setStatus({ type: 'error', message: data.error });
             }
-        } catch (err) {
+        } catch {
             setStatus({ type: 'error', message: 'Fehler beim Setzen des Klarnamens' });
         }
     };
@@ -306,7 +306,7 @@ function LogPage() {
     const [loading, setLoading] = useState(true);
     const [expandedEdit, setExpandedEdit] = useState(null);
 
-    const loadLogs = async () => {
+    const loadLogs = useCallback(async () => {
         setLoading(true);
         try {
             const [txRes, editRes, adminRes, authRes] = await Promise.all([
@@ -315,19 +315,21 @@ function LogPage() {
                 fetch('/api/admin/audit/admin', { credentials: 'include' }),
                 fetch('/api/admin/audit/auth', { credentials: 'include' })
             ]);
+
             if (txRes.ok) setTransactions(await txRes.json());
             if (editRes.ok) setEdits(await editRes.json());
             if (adminRes.ok) setAdminLogs(await adminRes.json());
             if (authRes.ok) setAuthLogs(await authRes.json());
-        } catch (err) {
-            console.error('Failed to load logs', err);
+        } catch {
+            console.error('Failed to load logs');
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    };
+    }, []);
 
     useEffect(() => {
         loadLogs();
-    }, []);
+    }, [loadLogs]);
 
     const renderDifferences = (before, after) => {
         const allProducts = new Set([...Object.keys(before), ...Object.keys(after)]);
@@ -596,18 +598,40 @@ function ServerConsole() {
                 const data = await res.json();
                 setLogs(data);
             }
-        } catch (err) {
-            console.error('Failed to fetch logs', err);
+        } catch {
+            console.error('Failed to fetch logs');
         }
     }, [filter]);
 
     useEffect(() => {
-        fetchLogs();
+        let isMounted = true;
+
+        const load = async () => {
+            try {
+                const url = filter === 'ALL'
+                    ? '/api/admin/logs?limit=200'
+                    : `/api/admin/logs?limit=200&category=${filter}`;
+                const res = await fetch(url, { credentials: 'include' });
+                if (res.ok && isMounted) {
+                    const data = await res.json();
+                    setLogs(data);
+                }
+            } catch {
+                console.error('Failed to fetch logs');
+            }
+        };
+
+        load();
+
         if (!paused) {
-            intervalRef.current = setInterval(fetchLogs, 3000);
+            intervalRef.current = setInterval(load, 3000);
         }
-        return () => clearInterval(intervalRef.current);
-    }, [fetchLogs, paused]);
+
+        return () => {
+            isMounted = false;
+            clearInterval(intervalRef.current);
+        }
+    }, [filter, paused]);
 
     useEffect(() => {
         if (!paused && scrollRef.current) {
@@ -727,18 +751,31 @@ function WsMonitor() {
         try {
             const res = await fetch(`/api/admin/ws-stats?hours=${hours}`, { credentials: 'include' });
             if (res.ok) {
-                setStats(await res.json());
+                const data = await res.json();
+                setStats(data);
             }
-        } catch (err) {
-            console.error('Failed to fetch ws stats', err);
+        } catch {
+            console.error('Failed to fetch ws stats');
         }
-        setLoading(false);
     }, [hours]);
 
     useEffect(() => {
-        fetchStats();
+        let isMounted = true;
+
+        const load = async () => {
+            setLoading(true);
+            await fetchStats();
+            if (isMounted) setLoading(false);
+        };
+
+        load();
+
         const interval = setInterval(fetchStats, 30000);
-        return () => clearInterval(interval);
+
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
     }, [fetchStats]);
 
     const history = stats.history || [];
@@ -784,7 +821,7 @@ function WsMonitor() {
                             {[1, 6, 12, 24].map(h => (
                                 <button
                                     key={h}
-                                    onClick={() => { setHours(h); setLoading(true); }}
+                                    onClick={() => { setHours(h); }}
                                     className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${hours === h
                                         ? 'bg-primary text-primary-foreground'
                                         : 'bg-muted/50 text-muted-foreground hover:bg-muted'
@@ -794,8 +831,9 @@ function WsMonitor() {
                                 </button>
                             ))}
                         </div>
-                        <Button variant="outline" size="sm" onClick={fetchStats}>
-                            <RotateCcw className="h-3.5 w-3.5" />
+                        <Button variant="outline" size="sm" onClick={() => { setLoading(true); fetchStats().then(() => setLoading(false)); }} disabled={loading} className="gap-1.5">
+                            <RotateCcw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                            Aktualisieren
                         </Button>
                     </div>
                 </CardTitle>
@@ -967,8 +1005,8 @@ function ProductManagement() {
             } else {
                 setStatus({ type: 'error', message: data.error });
             }
-        } catch (err) {
-            setStatus({ type: 'error', message: 'Fehler beim Hinzufügen' });
+        } catch {
+            setStatus({ type: 'error', message: 'Verbbindungsfehler' });
         }
     };
 
@@ -986,7 +1024,7 @@ function ProductManagement() {
                     const data = await res.json();
                     setStatus({ type: 'error', message: data.error });
                 }
-            } catch (err) {
+            } catch {
                 setStatus({ type: 'error', message: 'Fehler beim Löschen' });
             }
             setDeleting(null);
@@ -1018,8 +1056,8 @@ function ProductManagement() {
             } else {
                 setStatus({ type: 'error', message: data.error });
             }
-        } catch (err) {
-            setStatus({ type: 'error', message: 'Fehler beim Umbenennen' });
+        } catch {
+            setStatus({ type: 'error', message: 'Fehler beim Neuordnen' });
         }
     };
 
@@ -1045,8 +1083,8 @@ function ProductManagement() {
                 body: JSON.stringify({ order: orderPayload })
             });
             if (!res.ok) throw new Error('Failed to save order');
-        } catch (err) {
-            setStatus({ type: 'error', message: 'Fehler beim Speichern der Sortierung' });
+        } catch {
+            setStatus({ type: 'error', message: 'Fehler beim Speichern' });
             loadData();
         }
     };
@@ -1131,7 +1169,7 @@ function ProductManagement() {
                 const data = await res.json();
                 setStatus({ type: 'error', message: data.error || 'Fehler bei der Massenzuweisung' });
             }
-        } catch (err) {
+        } catch {
             setStatus({ type: 'error', message: 'Fehler bei der Massenzuweisung' });
         }
     };
@@ -1401,7 +1439,7 @@ function SettingsManagement() {
             } else {
                 throw new Error('Save failed');
             }
-        } catch (err) {
+        } catch {
             setStatus({ type: 'error', message: 'Fehler beim Speichern' });
             loadSettings(); // revert
         }

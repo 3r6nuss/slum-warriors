@@ -1,6 +1,6 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
+import express from 'express';
+export const router = express.Router();
+import db from '../db.js';
 
 // GET /api/products – list all products
 router.get('/', (req, res) => {
@@ -191,4 +191,4 @@ router.put('/bulk/warehouses', (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

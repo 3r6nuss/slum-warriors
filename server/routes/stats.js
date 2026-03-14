@@ -1,6 +1,6 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
+import express from 'express';
+export const router = express.Router();
+import db from '../db.js';
 
 // Helper to get dates for the last N days
 function getLastNDays(n) {
@@ -50,8 +50,8 @@ router.get('/overview', (req, res) => {
             topUsers,
             topProducts
         });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to access stats overview' });
     }
 });
 
@@ -92,9 +92,9 @@ router.get('/activity', (req, res) => {
         });
 
         res.json(formatted);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to access daily activity stats' });
     }
 });
 
-module.exports = router;
+export default router;

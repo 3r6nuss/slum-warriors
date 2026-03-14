@@ -1,15 +1,19 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const http = require('http');
-const session = require('express-session');
-const { initWebSocket } = require('./websocket');
-const { log, requestLoggerMiddleware } = require('./logger');
-const { startStatsJob } = require('./jobs/weeklyStats');
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import http from 'http';
+import session from 'express-session';
+import { fileURLToPath } from 'url';
+import { setupWebSocket } from './websocket.js';
+import { log, requestLoggerMiddleware } from './logger.js';
+import startWeeklyStatsJob from './jobs/weeklyStats.js';
 
 // Initialize DB (runs schema + seed)
-const db = require('./db');
-const { sendSystemAlert } = require('./lib/discord');
+import db from './db.js';
+import { sendSystemAlert } from './lib/discord.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
@@ -40,15 +44,23 @@ app.use(session({
     },
 }));
 
-// API Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/products', require('./routes/products'));
-app.use('/api/inventory', require('./routes/inventory'));
-app.use('/api/transactions', require('./routes/transactions'));
-app.use('/api/adjustments', require('./routes/adjustments'));
-app.use('/api/admin', require('./routes/admin'));
-app.use('/api/stats', require('./routes/stats'));
-app.use('/api/logs', require('./routes/logs'));
+import authRoutes from './routes/auth.js';
+import productsRoutes from './routes/products.js';
+import inventoryRoutes from './routes/inventory.js';
+import transactionsRoutes from './routes/transactions.js';
+import adjustmentsRoutes from './routes/adjustments.js';
+import adminRoutes from './routes/admin.js';
+import statsRoutes from './routes/stats.js';
+import logsRoutes from './routes/logs.js';
+
+app.use('/api/auth', authRoutes);
+app.use('/api/products', productsRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/transactions', transactionsRoutes);
+app.use('/api/adjustments', adjustmentsRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/stats', statsRoutes);
+app.use('/api/logs', logsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -70,7 +82,7 @@ if (isProduction) {
 }
 
 // Global API Error Handler
-app.use((err, req, res, next) => {
+app.use((err, req, res) => {
     log('ERROR', `Express Error: ${err.message}`);
     try {
         const stmt = db.prepare('INSERT INTO error_logs (level, message, stack, context) VALUES (?, ?, ?, ?)');
@@ -91,10 +103,10 @@ app.use((err, req, res, next) => {
 });
 
 // Initialize WebSocket
-initWebSocket(server);
+setupWebSocket(server);
 
 // Start Background Jobs
-startStatsJob();
+startWeeklyStatsJob();
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
@@ -115,7 +127,7 @@ process.on('uncaughtException', (err) => {
     setTimeout(() => process.exit(1), 1000);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason) => {
     log('ERROR', `Unhandled Rejection: ${reason}`);
     try {
         const msg = reason instanceof Error ? reason.message : String(reason);

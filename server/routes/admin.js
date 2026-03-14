@@ -1,9 +1,9 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
-const { getLogs } = require('../logger');
-const { requireAdmin } = require('./auth');
-const { getConnectedCount } = require('../websocket');
+import express from 'express';
+export const router = express.Router();
+import db from '../db.js';
+import { getLogs } from '../logger.js';
+import { requireAdmin } from './auth.js';
+import { getConnectedCount } from '../websocket.js';
 
 // GET /api/admin/logs – return log entries from ring buffer
 router.get('/logs', requireAdmin, (req, res) => {
@@ -32,8 +32,8 @@ router.get('/ws-stats', requireAdmin, (req, res) => {
             current: getConnectedCount(),
             history: stats,
         });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to access ws-stats' });
     }
 });
 
@@ -42,8 +42,8 @@ router.get('/audit/admin', requireAdmin, (req, res) => {
     try {
         const logs = db.prepare('SELECT * FROM admin_logs ORDER BY created_at DESC LIMIT 200').all();
         res.json(logs);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to access admin audit logs' });
     }
 });
 
@@ -52,8 +52,8 @@ router.get('/audit/auth', requireAdmin, (req, res) => {
     try {
         const logs = db.prepare('SELECT * FROM auth_logs ORDER BY created_at DESC LIMIT 200').all();
         res.json(logs);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to access auth audit logs' });
     }
 });
 
@@ -67,8 +67,8 @@ router.get('/settings', requireAdmin, (req, res) => {
             settingsObj[s.key] = s.value;
         }
         res.json(settingsObj);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to load settings' });
     }
 });
 
@@ -94,9 +94,9 @@ router.put('/settings', requireAdmin, (req, res) => {
         `).run(req.user ? req.user.id : null, adminStr, 'UPDATE_SETTING', key, `Changed to ${value}`);
 
         res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to update settings' });
     }
 });
 
-module.exports = router;
+export default router;

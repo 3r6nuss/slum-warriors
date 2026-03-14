@@ -2,6 +2,7 @@
   "name": "slum-warriors",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "server": "node server/index.js",

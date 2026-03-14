@@ -38,9 +38,9 @@ function log(category, message, level = 'INFO') {
     // Also output to real console
     const prefix = `[${entry.timestamp}] [${level}] [${category}]`;
     if (level === 'ERROR') {
-        process.stderr.write(`${prefix} ${entry.message}\n`);
+        console.error(`${prefix} ${entry.message}`);
     } else {
-        process.stdout.write(`${prefix} ${entry.message}\n`);
+        console.log(`${prefix} ${entry.message}`);
     }
 
     return entry;
@@ -88,4 +88,4 @@ function requestLoggerMiddleware(req, res, next) {
     next();
 }
 
-module.exports = { log, getLogs, requestLoggerMiddleware };
+export { log, getLogs, requestLoggerMiddleware };

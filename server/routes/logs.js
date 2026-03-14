@@ -1,6 +1,6 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
+import express from 'express';
+export const router = express.Router();
+import db from '../db.js';
 
 // GET /api/logs
 // Unified feed of transactions and adjustments
@@ -104,9 +104,9 @@ router.get('/', (req, res) => {
             totalPages: Math.ceil(totalCountParams / limit),
             currentPage: page
         });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    } catch {
+        res.status(500).json({ error: 'Failed to get logs' });
     }
 });
 
-module.exports = router;
+export default router;
