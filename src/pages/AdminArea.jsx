@@ -13,7 +13,7 @@ import {
     CheckCircle, AlertCircle, Swords, Clock, UserCheck, UserX,
     Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi,
     Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Send, Loader2,
-    GripVertical, Layers
+    GripVertical, Layers, Warehouse
 } from 'lucide-react';
 
 const HARDCODED_IDS = [
