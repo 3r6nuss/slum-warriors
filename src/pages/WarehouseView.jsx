@@ -224,10 +224,11 @@ export default function WarehouseView() {
     const [createProductLoading, setCreateProductLoading] = useState(false);
     const [createProductStatus, setCreateProductStatus] = useState(null);
 
-    // Keyboard shortcut: "/" toggles search focus, Escape blurs
+    // Keyboard shortcut: "/" or "^" toggles search focus, Escape blurs
     useEffect(() => {
         const handleKeyDown = (e) => {
-            if (e.key === '/') {
+            // "/" or "^" (Dead key on German keyboard) to toggle search
+            if (e.key === '/' || e.key === '^' || (e.key === 'Dead' && e.code === 'Backquote')) {
                 e.preventDefault();
                 // Toggle: if already focused in search, blur out; otherwise focus in
                 if (document.activeElement === searchRef.current) {
@@ -609,7 +610,7 @@ export default function WarehouseView() {
                                     id="warehouse-search"
                                     placeholder='Produkt suchen... (drücke "/")'
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={(e) => setSearchQuery(e.target.value.replace(/\^/g, ''))}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Tab' && filteredItems.length > 0 && searchQuery.trim()) {
                                             e.preventDefault();
