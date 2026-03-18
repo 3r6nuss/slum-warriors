@@ -1,4 +1,4 @@
-import React, { useState, useMemo, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { useInventorySocket } from '@/lib/websocket';
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import {
     Package, Shield, Warehouse, Settings, Save, X, Loader2,
     PackagePlus, PackageMinus, CheckCircle, AlertCircle, GripHorizontal, ScanLine,
-    ArrowDownToLine, ArrowUpToLine
+    ArrowDownToLine, ArrowUpToLine, Search, Plus
 } from 'lucide-react';
 
 const InventoryScanner = React.lazy(() => import('@/components/InventoryScanner'));
@@ -214,6 +214,37 @@ export default function WarehouseView() {
     const [quickStatus, setQuickStatus] = useState(null);
     const [showScanner, setShowScanner] = useState(false);
 
+    // Search state
+    const [searchQuery, setSearchQuery] = useState('');
+    const searchRef = useRef(null);
+
+    // Inline product creation state
+    const [isCreatingProduct, setIsCreatingProduct] = useState(false);
+    const [newProductName, setNewProductName] = useState('');
+    const [createProductLoading, setCreateProductLoading] = useState(false);
+    const [createProductStatus, setCreateProductStatus] = useState(null);
+
+    // Keyboard shortcut: "/" toggles search focus, Escape blurs
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === '/') {
+                e.preventDefault();
+                // Toggle: if already focused in search, blur out; otherwise focus in
+                if (document.activeElement === searchRef.current) {
+                    searchRef.current?.blur();
+                } else if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+                    searchRef.current?.focus();
+                }
+            }
+            if (e.key === 'Escape' && document.activeElement === searchRef.current) {
+                if (searchQuery) setSearchQuery('');
+                searchRef.current?.blur();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [searchQuery]);
+
     // Local state for optimistic drag & drop reordering
     const [draggedIdx, setDraggedIdx] = useState(null);
 
@@ -233,6 +264,61 @@ export default function WarehouseView() {
         }
         return warehouseItems;
     }, [warehouseItems, draggedIdx, draggingOrder]);
+
+    // Filtered items based on search query
+    const filteredItems = useMemo(() => {
+        if (!searchQuery.trim()) return localItems;
+        const q = searchQuery.toLowerCase().trim();
+        return localItems.filter(item =>
+            item.product_name.toLowerCase().includes(q)
+        );
+    }, [localItems, searchQuery]);
+
+    // Autocomplete suggestion: first item that STARTS with the query
+    const autocompleteSuggestion = useMemo(() => {
+        if (!searchQuery.trim() || filteredItems.length === 0) return '';
+        const q = searchQuery.toLowerCase().trim();
+        const startsWithMatch = filteredItems.find(item =>
+            item.product_name.toLowerCase().startsWith(q)
+        );
+        return startsWithMatch ? startsWithMatch.product_name : '';
+    }, [searchQuery, filteredItems]);
+
+    // Inline product creation handler
+    const handleCreateProduct = useCallback(async () => {
+        const name = newProductName.trim();
+        if (!name) return;
+
+        setCreateProductLoading(true);
+        setCreateProductStatus(null);
+
+        try {
+            const res = await fetch('/api/products', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    name,
+                    warehouseIds: [parseInt(warehouseId)],
+                    is_stackable: true,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setCreateProductStatus({ type: 'success', message: `"${name}" wurde angelegt!` });
+                setNewProductName('');
+                setIsCreatingProduct(false);
+                // Keep search so user sees the new product appear via websocket
+            } else {
+                setCreateProductStatus({ type: 'error', message: data.error || 'Fehler beim Anlegen.' });
+            }
+        } catch {
+            setCreateProductStatus({ type: 'error', message: 'Verbindungsfehler.' });
+        }
+
+        setCreateProductLoading(false);
+        setTimeout(() => setCreateProductStatus(null), 4000);
+    }, [newProductName, warehouseId]);
 
     // We use derived state instead of an effect to initialize draggingOrder
     // If draggedIdx is active but we have no dragging order yet, initialize it
@@ -505,8 +591,76 @@ export default function WarehouseView() {
                             )}
                         </CardHeader>
                         <CardContent>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 mt-4">
-                                {localItems.map((item, index) => (
+                            {/* Search Bar with Autocomplete */}
+                            <div className="relative mt-2 mb-4">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Search className="h-4 w-4 text-muted-foreground" />
+                                </div>
+                                {/* Ghost text autocomplete hint */}
+                                {autocompleteSuggestion && searchQuery && (
+                                    <div className="absolute inset-y-0 left-0 pl-9 flex items-center pointer-events-none">
+                                        <span className="text-muted-foreground/30 text-sm">
+                                            {autocompleteSuggestion}
+                                        </span>
+                                    </div>
+                                )}
+                                <Input
+                                    ref={searchRef}
+                                    id="warehouse-search"
+                                    placeholder='Produkt suchen... (drücke "/")'
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Tab' && filteredItems.length > 0 && searchQuery.trim()) {
+                                            e.preventDefault();
+                                            // Autocomplete the name if we have a suggestion
+                                            if (autocompleteSuggestion) {
+                                                setSearchQuery(autocompleteSuggestion);
+                                            }
+                                            // Focus the first filtered item's quantity input
+                                            const firstItemId = filteredItems[0]?.product_id;
+                                            if (firstItemId) {
+                                                const input = document.querySelector(`[data-quick-input="${firstItemId}"]`);
+                                                if (input) {
+                                                    input.focus();
+                                                    input.select();
+                                                }
+                                            }
+                                        }
+                                    }}
+                                    className="pl-9 pr-9 bg-secondary/30 border-border/50 focus:bg-background transition-colors relative z-10 bg-transparent"
+                                    style={{ caretColor: 'var(--foreground)' }}
+                                />
+                                {searchQuery && (
+                                    <button
+                                        onClick={() => { setSearchQuery(''); searchRef.current?.focus(); }}
+                                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground transition-colors z-20"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                )}
+                                {searchQuery.trim() && filteredItems.length > 0 && (
+                                    <div className="absolute inset-y-0 right-8 flex items-center pointer-events-none">
+                                        <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-border/50 bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">
+                                            Tab ⇥
+                                        </kbd>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Create Product Status */}
+                            {createProductStatus && (
+                                <div className={`p-3 rounded-lg mb-4 text-sm font-medium border ${
+                                    createProductStatus.type === 'error'
+                                        ? 'bg-destructive/10 text-destructive border-destructive/20'
+                                        : 'bg-success/10 text-success border-success/20'
+                                }`}>
+                                    {createProductStatus.message}
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2">
+                                {filteredItems.map((item, index) => (
                                     <div
                                         key={item.id}
                                         draggable={!isEditing}
@@ -516,7 +670,7 @@ export default function WarehouseView() {
                                         className={`group relative flex flex-col p-2.5 rounded-lg border transition-all duration-200 ${!isEditing
                                             ? 'cursor-grab active:cursor-grabbing border-border/50 hover:border-primary/50 hover:bg-primary/5 hover:shadow-md'
                                             : 'border-border/50 bg-card cursor-default'
-                                            }`}
+                                            } ${index === 0 && searchQuery.trim() ? 'ring-2 ring-primary/40 border-primary/50 bg-primary/5' : ''}`}
                                         style={{
                                             opacity: draggedIdx === index ? 0.5 : 1,
                                             transform: draggedIdx === index ? 'scale(0.98)' : 'scale(1)',
@@ -562,6 +716,7 @@ export default function WarehouseView() {
 
                                                 <div className="flex-1 relative">
                                                     <Input
+                                                        data-quick-input={item.product_id}
                                                         className="h-7 text-center text-[10px] px-1 bg-secondary/30 focus:bg-background transition-colors"
                                                         placeholder="± Zahl ↵"
                                                         title="Zahl eingeben und Enter drücken (+ für Einlagern, - für Auslagern)"
@@ -572,6 +727,11 @@ export default function WarehouseView() {
                                                                 if (!isNaN(val) && val !== 0) {
                                                                     handleQuickTransaction(e, item, val);
                                                                     e.currentTarget.value = '';
+                                                                    // Refocus search for next item
+                                                                    setTimeout(() => {
+                                                                        searchRef.current?.focus();
+                                                                        searchRef.current?.select();
+                                                                    }, 50);
                                                                 }
                                                             }
                                                         }}
@@ -608,10 +768,78 @@ export default function WarehouseView() {
                                     </div>
                                 ))}
                             </div>
-                            {localItems.length === 0 && (
-                                <div className="text-center text-muted-foreground py-12 border-2 border-dashed border-border/50 rounded-xl mt-4">
-                                    <Package className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
-                                    <p>Keine Produkte im Lager</p>
+
+                            {/* No results / Empty state + Inline Product Creation */}
+                            {filteredItems.length === 0 && (
+                                <div className="text-center text-muted-foreground py-10 border-2 border-dashed border-border/50 rounded-xl mt-4">
+                                    {searchQuery.trim() ? (
+                                        <>
+                                            <Search className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
+                                            <p className="font-medium">Kein Produkt gefunden für "{searchQuery}"</p>
+                                            <p className="text-sm mt-1 text-muted-foreground/70">Möchtest du es anlegen?</p>
+
+                                            {!isCreatingProduct ? (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="mt-4 border-primary/30 text-primary hover:bg-primary/10"
+                                                    onClick={() => {
+                                                        setNewProductName(searchQuery.trim());
+                                                        setIsCreatingProduct(true);
+                                                    }}
+                                                >
+                                                    <Plus className="h-4 w-4 mr-2" />
+                                                    "{searchQuery.trim()}" anlegen
+                                                </Button>
+                                            ) : (
+                                                <form
+                                                    onSubmit={(e) => { e.preventDefault(); handleCreateProduct(); }}
+                                                    className="mt-4 max-w-sm mx-auto space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300"
+                                                >
+                                                    <div className="space-y-1.5">
+                                                        <Label htmlFor="new-product-name" className="text-xs text-left block">Produktname</Label>
+                                                        <Input
+                                                            id="new-product-name"
+                                                            value={newProductName}
+                                                            onChange={(e) => setNewProductName(e.target.value)}
+                                                            placeholder="Produktname..."
+                                                            autoFocus
+                                                            className="text-center"
+                                                        />
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground/60">
+                                                        Wird im <strong>{meta.label}</strong> angelegt
+                                                    </p>
+                                                    <div className="flex gap-2 justify-center">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => { setIsCreatingProduct(false); setCreateProductStatus(null); }}
+                                                            disabled={createProductLoading}
+                                                        >
+                                                            Abbrechen
+                                                        </Button>
+                                                        <Button
+                                                            type="submit"
+                                                            size="sm"
+                                                            className="bg-primary hover:bg-primary/90"
+                                                            disabled={createProductLoading || !newProductName.trim()}
+                                                        >
+                                                            {createProductLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                                            <Plus className="h-4 w-4 mr-1" />
+                                                            Anlegen
+                                                        </Button>
+                                                    </div>
+                                                </form>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Package className="h-8 w-8 mx-auto mb-3 text-muted-foreground/50" />
+                                            <p>Keine Produkte im Lager</p>
+                                        </>
+                                    )}
                                 </div>
                             )}
 
