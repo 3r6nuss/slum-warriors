@@ -14,11 +14,11 @@ router.get('/products', (req, res) => {
     let products;
     if (q) {
         products = db.prepare(
-            `SELECT id, name FROM products WHERE archived = 0 AND name LIKE ? ORDER BY name ASC LIMIT 25`
+            `SELECT id, name FROM products WHERE archived = 0 AND name LIKE ? ORDER BY name ASC`
         ).all(`%${q}%`);
     } else {
         products = db.prepare(
-            `SELECT id, name FROM products WHERE archived = 0 ORDER BY name ASC LIMIT 25`
+            `SELECT id, name FROM products WHERE archived = 0 ORDER BY name ASC`
         ).all();
     }
 
