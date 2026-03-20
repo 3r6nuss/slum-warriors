@@ -9,8 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/lib/auth';
 import {
-    ShieldCheck, Users, Crown, Shield, User, Eye,
-    CheckCircle, AlertCircle, Swords, Clock,
+    ShieldCheck, Users, Crown, Shield, User, Eye, UserCheck, UserX,
+    CheckCircle, AlertCircle, Swords, Clock, ScrollText,
     Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi,
     Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Loader2,
     GripVertical, Layers, Warehouse
