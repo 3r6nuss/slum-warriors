@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/lib/auth';
 import {
     ShieldCheck, Users, Crown, Shield, User, Eye, UserCheck, UserX,
-    CheckCircle, AlertCircle, Swords, Clock, ScrollText,
+    CheckCircle, AlertCircle, Swords, Clock, ScrollText, Send,
     Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi,
     Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Loader2,
     GripVertical, Layers, Warehouse
