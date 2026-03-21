@@ -184,16 +184,7 @@ if (!warehouseNames.includes('Führungswaffenlager')) {
   insertWarehouse.run('Führungswaffenlager', 'leadership');
 }
 
-// Ensure all products have inventory records in all warehouses
-const allWarehouses = db.prepare('SELECT id FROM warehouses').all();
-const allProducts = db.prepare('SELECT id FROM products').all();
-const insertMissingInventory = db.prepare('INSERT OR IGNORE INTO inventory (warehouse_id, product_id, quantity) VALUES (?, ?, 0)');
 
-for (const wh of allWarehouses) {
-  for (const prod of allProducts) {
-    insertMissingInventory.run(wh.id, prod.id);
-  }
-}
 
 // Seed default products if not exist
 const productCount = db.prepare('SELECT COUNT(*) as count FROM products').get();
