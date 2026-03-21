@@ -945,7 +945,7 @@ function ProductManagement() {
     const [bulkYellow, setBulkYellow] = useState('1');
     const [bulkLoading, setBulkLoading] = useState(false);
 
-    const loadData = async () => {
+    const loadData = async (resetSelection = false) => {
         try {
             const [prodRes, whRes, invRes] = await Promise.all([
                 fetch('/api/products', { credentials: 'include' }),
@@ -975,7 +975,7 @@ function ProductManagement() {
 
                 setProducts(productsWithWarehouses);
                 setWarehouses(whData);
-                setSelectedWarehouses(whData.map(w => w.id));
+                setSelectedWarehouses(prev => resetSelection || prev.length === 0 ? whData.map(w => w.id) : prev);
             }
         } catch (err) {
             console.error('Failed to load data', err);
@@ -983,7 +983,7 @@ function ProductManagement() {
         setLoading(false);
     };
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => { loadData(true); }, []);
 
     const toggleWarehouse = (id) => {
         setSelectedWarehouses(prev =>
