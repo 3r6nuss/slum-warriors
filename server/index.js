@@ -52,9 +52,6 @@ import adjustmentsRoutes from './routes/adjustments.js';
 import adminRoutes from './routes/admin.js';
 import statsRoutes from './routes/stats.js';
 import logsRoutes from './routes/logs.js';
-import botRoutes from './routes/bot.js';
-import requireApiKey from './middleware/apiKey.js';
-import rateLimit from './middleware/rateLimit.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productsRoutes);
@@ -64,7 +61,6 @@ app.use('/api/adjustments', adjustmentsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/logs', logsRoutes);
-app.use('/api/bot', rateLimit(60, 60_000), requireApiKey, botRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
