@@ -931,6 +931,15 @@ function ProductManagement() {
     const [deleting, setDeleting] = useState(null);
     const [editingProduct, setEditingProduct] = useState(null); // { id, name }
 
+    // Threshold editing state
+    const [editingThreshold, setEditingThreshold] = useState(null); // product id
+    const [thresholdValues, setThresholdValues] = useState({ green: '', yellow: '' });
+
+    // Bulk threshold state
+    const [bulkGreen, setBulkGreen] = useState('10');
+    const [bulkYellow, setBulkYellow] = useState('1');
+    const [bulkLoading, setBulkLoading] = useState(false);
+
     const loadData = async () => {
         try {
             const [prodRes, whRes, invRes] = await Promise.all([
@@ -1193,6 +1202,100 @@ function ProductManagement() {
         }
     };
 
+    // ── Threshold Handlers ──
+    const openThresholdEditor = (product) => {
+        setEditingThreshold(product.id);
+        setThresholdValues({
+            green: (product.green_threshold ?? 10).toString(),
+            yellow: (product.yellow_threshold ?? 1).toString()
+        });
+    };
+
+    const saveThreshold = async (productId) => {
+        const green = parseInt(thresholdValues.green);
+        const yellow = parseInt(thresholdValues.yellow);
+        if (isNaN(green) || isNaN(yellow) || green < 0 || yellow < 0) {
+            setStatus({ type: 'error', message: 'Schwellwerte müssen positive Zahlen sein.' });
+            return;
+        }
+        if (yellow >= green) {
+            setStatus({ type: 'error', message: 'Gelb-Schwellwert muss kleiner als Grün-Schwellwert sein.' });
+            return;
+        }
+        setProducts(products.map(p => p.id === productId ? { ...p, green_threshold: green, yellow_threshold: yellow } : p));
+        setEditingThreshold(null);
+        try {
+            const res = await fetch(`/api/products/${productId}/thresholds`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ green_threshold: green, yellow_threshold: yellow })
+            });
+            if (!res.ok) { const data = await res.json(); throw new Error(data.error || 'Fehler'); }
+        } catch (err) {
+            setStatus({ type: 'error', message: err.message });
+            loadData();
+        }
+    };
+
+    const bulkSetThresholds = async () => {
+        const green = parseInt(bulkGreen);
+        const yellow = parseInt(bulkYellow);
+        if (isNaN(green) || isNaN(yellow) || green < 0 || yellow < 0) {
+            setStatus({ type: 'error', message: 'Schwellwerte müssen positive Zahlen sein.' });
+            return;
+        }
+        if (yellow >= green) {
+            setStatus({ type: 'error', message: 'Gelb-Schwellwert muss kleiner als Grün-Schwellwert sein.' });
+            return;
+        }
+        setBulkLoading(true);
+        try {
+            const res = await fetch('/api/products/bulk/thresholds', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ green_threshold: green, yellow_threshold: yellow })
+            });
+            const data = await res.json();
+            if (res.ok) { setStatus({ type: 'success', message: data.message }); loadData(); }
+            else { setStatus({ type: 'error', message: data.error }); }
+        } catch { setStatus({ type: 'error', message: 'Fehler bei der Massen-Aktualisierung.' }); }
+        setBulkLoading(false);
+    };
+
+    // Helper: 3 traffic-light dots for a product
+    const TrafficLight = ({ product, onClick }) => {
+        const green = product.green_threshold ?? 10;
+        const yellow = product.yellow_threshold ?? 1;
+        return (
+            <button onClick={onClick} className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg hover:bg-muted/60 transition-all group" title={`Ampel: Rot < ${yellow} ≤ Gelb < ${green} ≤ Grün`}>
+                <span className="relative flex h-2.5 w-2.5"><span className="absolute inset-0 rounded-full bg-red-500/60 group-hover:animate-ping" style={{ animationDuration: '2s' }} /><span className="relative rounded-full h-2.5 w-2.5 bg-red-500" /></span>
+                <span className="relative flex h-2.5 w-2.5"><span className="relative rounded-full h-2.5 w-2.5 bg-amber-400" /></span>
+                <span className="relative flex h-2.5 w-2.5"><span className="relative rounded-full h-2.5 w-2.5 bg-emerald-500" /></span>
+                <span className="ml-1 text-[9px] font-mono text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">{yellow}/{green}</span>
+            </button>
+        );
+    };
+
+    // Helper: zone bar preview
+    const ZoneBar = ({ green, yellow }) => {
+        const total = Math.max(green * 1.3, 20);
+        const yellowPct = Math.min((yellow / total) * 100, 100);
+        const greenPct = Math.min((green / total) * 100, 100);
+        return (
+            <div className="relative h-2 w-full rounded-full overflow-hidden bg-muted/30 border border-border/30">
+                <div className="absolute inset-0 flex">
+                    <div className="h-full bg-gradient-to-r from-red-500/80 to-red-500/40" style={{ width: `${yellowPct}%` }} />
+                    <div className="h-full bg-gradient-to-r from-amber-400/60 to-amber-400/30" style={{ width: `${greenPct - yellowPct}%` }} />
+                    <div className="h-full bg-gradient-to-r from-emerald-500/50 to-emerald-500/20" style={{ width: `${100 - greenPct}%` }} />
+                </div>
+                <div className="absolute top-0 h-full w-px bg-amber-400" style={{ left: `${yellowPct}%` }} />
+                <div className="absolute top-0 h-full w-px bg-emerald-500" style={{ left: `${greenPct}%` }} />
+            </div>
+        );
+    };
+
     if (loading) return <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></div>;
 
     return (
@@ -1275,11 +1378,54 @@ function ProductManagement() {
                     </div>
                 </div>
 
+                {/* ── Bestandsampel – Global Defaults ── */}
+                <div className="p-4 rounded-xl border border-border/50 bg-gradient-to-r from-red-500/[0.03] via-amber-400/[0.03] to-emerald-500/[0.03] space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                            <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                            <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                        </div>
+                        Bestandsampel – Alle Produkte
+                    </div>
+                    <p className="text-xs text-muted-foreground/70">
+                        Setze Standard-Schwellwerte für <strong>alle</strong> Produkte gleichzeitig. Individuelle Werte werden überschrieben.
+                    </p>
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                Ab Gelb
+                            </label>
+                            <Input type="number" min="0" value={bulkYellow} onChange={(e) => setBulkYellow(e.target.value)} className="w-20 h-8 text-sm text-center bg-background" />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                Ab Grün
+                            </label>
+                            <Input type="number" min="1" value={bulkGreen} onChange={(e) => setBulkGreen(e.target.value)} className="w-20 h-8 text-sm text-center bg-background" />
+                        </div>
+                        <div className="flex-1 min-w-[120px] max-w-[260px] pt-4">
+                            <ZoneBar green={parseInt(bulkGreen) || 10} yellow={parseInt(bulkYellow) || 1} />
+                            <div className="flex justify-between text-[9px] text-muted-foreground/50 mt-0.5 font-mono">
+                                <span>0 (Rot)</span>
+                                <span>{bulkYellow} (Gelb)</span>
+                                <span>{bulkGreen}+ (Grün)</span>
+                            </div>
+                        </div>
+                        <Button size="sm" onClick={bulkSetThresholds} disabled={bulkLoading || !bulkGreen || !bulkYellow} className="gap-1.5 bg-gradient-to-r from-amber-500/80 to-emerald-500/80 hover:from-amber-500 hover:to-emerald-500 text-white border-0">
+                            {bulkLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Settings className="h-3.5 w-3.5" />}
+                            Für alle setzen
+                        </Button>
+                    </div>
+                </div>
+
                 {/* ── Product list ── */}
                 <div className="space-y-1.5">
                     {products.map((p, index) => (
+                        <div key={p.id}>
                         <div
-                            key={p.id}
                             className="group flex items-center gap-3 px-3 py-2.5 rounded-xl border border-transparent bg-muted/20 hover:bg-muted/40 hover:border-border/30 transition-all"
                         >
                             {/* Sort controls */}
@@ -1340,6 +1486,9 @@ function ProductManagement() {
                                 )}
                             </div>
 
+                            {/* Traffic Light indicator */}
+                            <TrafficLight product={p} onClick={() => editingThreshold === p.id ? setEditingThreshold(null) : openThresholdEditor(p)} />
+
                             {/* Warehouse pills */}
                             <div className="flex items-center gap-1 shrink-0">
                                 {warehouses.map(w => {
@@ -1384,6 +1533,38 @@ function ProductManagement() {
                             >
                                 <Trash2 className="h-3.5 w-3.5" />
                             </button>
+                        </div>
+
+                        {/* Inline threshold editor */}
+                        {editingThreshold === p.id && (
+                            <div className="ml-10 mt-1 mb-2 p-3 rounded-xl border border-border/50 bg-gradient-to-r from-red-500/[0.02] via-amber-400/[0.02] to-emerald-500/[0.02] animate-in slide-in-from-top-2 fade-in duration-200">
+                                <div className="flex flex-wrap items-end gap-3">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                            Ab Gelb
+                                        </label>
+                                        <Input type="number" min="0" value={thresholdValues.yellow} onChange={(e) => setThresholdValues({ ...thresholdValues, yellow: e.target.value })} className="w-16 h-7 text-xs text-center bg-background" onKeyDown={(e) => { if (e.key === 'Enter') saveThreshold(p.id); if (e.key === 'Escape') setEditingThreshold(null); }} autoFocus />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 flex items-center gap-1">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                            Ab Grün
+                                        </label>
+                                        <Input type="number" min="1" value={thresholdValues.green} onChange={(e) => setThresholdValues({ ...thresholdValues, green: e.target.value })} className="w-16 h-7 text-xs text-center bg-background" onKeyDown={(e) => { if (e.key === 'Enter') saveThreshold(p.id); if (e.key === 'Escape') setEditingThreshold(null); }} />
+                                    </div>
+                                    <div className="flex-1 min-w-[100px] max-w-[200px] pt-3">
+                                        <ZoneBar green={parseInt(thresholdValues.green) || 10} yellow={parseInt(thresholdValues.yellow) || 1} />
+                                    </div>
+                                    <button className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors" onClick={() => saveThreshold(p.id)} title="Speichern">
+                                        <Check className="h-4 w-4" />
+                                    </button>
+                                    <button className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted transition-colors" onClick={() => setEditingThreshold(null)} title="Abbrechen">
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                         </div>
                     ))}
 

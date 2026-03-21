@@ -687,7 +687,7 @@ export default function WarehouseView() {
                                         )}
                                         {!isEditing && (
                                             <div className="flex justify-end mb-1">
-                                                <Badge variant={item.quantity > 0 ? (item.quantity > 10 ? 'success' : 'warning') : 'destructive'} className="px-1.5 py-0 text-[10px] h-5">
+                                            <Badge variant={item.quantity >= (item.green_threshold ?? 10) ? 'success' : item.quantity >= (item.yellow_threshold ?? 1) ? 'warning' : 'destructive'} className="px-1.5 py-0 text-[10px] h-5">
                                                     {item.quantity}
                                                 </Badge>
                                             </div>

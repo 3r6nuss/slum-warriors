@@ -191,4 +191,61 @@ router.put('/bulk/warehouses', (req, res) => {
     }
 });
 
+// PUT /api/products/bulk/thresholds - mass update thresholds for all products
+router.put('/bulk/thresholds', (req, res) => {
+    const { green_threshold, yellow_threshold } = req.body;
+
+    if (green_threshold === undefined || yellow_threshold === undefined) {
+        return res.status(400).json({ error: 'green_threshold und yellow_threshold sind erforderlich' });
+    }
+
+    const green = parseInt(green_threshold);
+    const yellow = parseInt(yellow_threshold);
+
+    if (isNaN(green) || isNaN(yellow) || green < 0 || yellow < 0) {
+        return res.status(400).json({ error: 'Schwellwerte müssen positive Zahlen sein' });
+    }
+
+    if (yellow >= green) {
+        return res.status(400).json({ error: 'Gelb-Schwellwert muss kleiner als Grün-Schwellwert sein' });
+    }
+
+    try {
+        db.prepare('UPDATE products SET green_threshold = ?, yellow_threshold = ? WHERE archived = 0').run(green, yellow);
+        const count = db.prepare('SELECT COUNT(*) as count FROM products WHERE archived = 0').get().count;
+        res.json({ success: true, message: `Schwellwerte für ${count} Produkte aktualisiert` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT /api/products/:id/thresholds - update stock level thresholds
+router.put('/:id/thresholds', (req, res) => {
+    const { id } = req.params;
+    const { green_threshold, yellow_threshold } = req.body;
+
+    if (green_threshold === undefined || yellow_threshold === undefined) {
+        return res.status(400).json({ error: 'green_threshold und yellow_threshold sind erforderlich' });
+    }
+
+    const green = parseInt(green_threshold);
+    const yellow = parseInt(yellow_threshold);
+
+    if (isNaN(green) || isNaN(yellow) || green < 0 || yellow < 0) {
+        return res.status(400).json({ error: 'Schwellwerte müssen positive Zahlen sein' });
+    }
+
+    if (yellow >= green) {
+        return res.status(400).json({ error: 'Gelb-Schwellwert muss kleiner als Grün-Schwellwert sein' });
+    }
+
+    try {
+        db.prepare('UPDATE products SET green_threshold = ?, yellow_threshold = ? WHERE id = ?').run(green, yellow, id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 export default router;
+

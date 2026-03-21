@@ -145,6 +145,16 @@ if (!productCols.find(c => c.name === 'is_stackable')) {
   db.exec(`ALTER TABLE products ADD COLUMN is_stackable INTEGER NOT NULL DEFAULT 1`);
 }
 
+// Migration: Add 'green_threshold' column to products table if missing
+if (!productCols.find(c => c.name === 'green_threshold')) {
+  db.exec(`ALTER TABLE products ADD COLUMN green_threshold INTEGER NOT NULL DEFAULT 10`);
+}
+
+// Migration: Add 'yellow_threshold' column to products table if missing
+if (!productCols.find(c => c.name === 'yellow_threshold')) {
+  db.exec(`ALTER TABLE products ADD COLUMN yellow_threshold INTEGER NOT NULL DEFAULT 1`);
+}
+
 // Migration: Add 'sort_order' column to inventory table if missing
 const inventoryCols = db.prepare("PRAGMA table_info(inventory)").all();
 if (!inventoryCols.find(c => c.name === 'sort_order')) {
