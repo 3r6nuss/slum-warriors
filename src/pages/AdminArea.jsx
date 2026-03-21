@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/lib/auth';
 import {
@@ -926,6 +927,10 @@ function ProductManagement() {
     const [selectedWarehouses, setSelectedWarehouses] = useState([]);
     const [newName, setNewName] = useState('');
     const [newStackable, setNewStackable] = useState(true);
+    const [newGreenThreshold, setNewGreenThreshold] = useState('10');
+    const [newYellowThreshold, setNewYellowThreshold] = useState('1');
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState(null);
@@ -986,12 +991,27 @@ function ProductManagement() {
         );
     };
 
+    const resetNewProductForm = () => {
+        setNewName('');
+        setNewStackable(true);
+        setNewGreenThreshold('10');
+        setNewYellowThreshold('1');
+        // keep selectedWarehouses as is to make adding multiple products easier
+    };
+
     const addProduct = async () => {
         if (!newName.trim() || selectedWarehouses.length === 0) {
             if (selectedWarehouses.length === 0) {
                 setStatus({ type: 'error', message: 'Bitte wähle mindestens ein Lager aus' });
             }
             return;
+        }
+
+        const green = parseInt(newGreenThreshold);
+        const yellow = parseInt(newYellowThreshold);
+        if (isNaN(green) || isNaN(yellow) || green < 0 || yellow < 0 || yellow >= green) {
+             setStatus({ type: 'error', message: 'Ungültige Schwellwerte (Gelb muss < Grün sein, > 0).' });
+             return;
         }
 
         try {
@@ -1003,19 +1023,21 @@ function ProductManagement() {
                     name: newName.trim(),
                     warehouseIds: selectedWarehouses,
                     is_stackable: newStackable,
+                    green_threshold: green,
+                    yellow_threshold: yellow
                 }),
             });
             const data = await res.json();
             if (res.ok) {
                 setStatus({ type: 'success', message: `"${data.name}" wurde hinzugefügt` });
-                setNewName('');
-                setNewStackable(true);
+                setIsAddModalOpen(false);
+                resetNewProductForm();
                 loadData();
             } else {
                 setStatus({ type: 'error', message: data.error });
             }
         } catch {
-            setStatus({ type: 'error', message: 'Verbbindungsfehler' });
+            setStatus({ type: 'error', message: 'Verbindungsfehler' });
         }
     };
 
@@ -1318,64 +1340,129 @@ function ProductManagement() {
                     </div>
                 )}
 
-                {/* ── Add new product ── */}
-                <div className="p-4 rounded-xl border border-border/50 bg-muted/20 space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-                        <Plus className="h-4 w-4" />
-                        Neues Produkt
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                        <Input
-                            value={newName}
-                            onChange={(e) => setNewName(e.target.value)}
-                            placeholder="Produktname..."
-                            className="flex-1 min-w-[180px] bg-background h-9"
-                            onKeyDown={(e) => { if (e.key === 'Enter') addProduct(); }}
-                        />
-                        <div className="flex items-center gap-1.5">
-                            {warehouses.map(w => (
-                                <button
-                                    key={w.id}
-                                    onClick={() => toggleWarehouse(w.id)}
-                                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border ${selectedWarehouses.includes(w.id)
-                                        ? w.type === 'leadership'
-                                            ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                                            : 'bg-primary/15 text-primary border-primary/30'
-                                        : 'bg-transparent text-muted-foreground border-border/50 opacity-50 hover:opacity-80'
-                                        }`}
-                                >
-                                    {w.name}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setNewStackable(!newStackable)}
-                                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                                title={newStackable ? 'Stackable (Mengenangabe)' : 'Non-stackable (immer 1x)'}
-                            >
-                                <Layers className={`h-3.5 w-3.5 ${newStackable ? 'text-primary' : 'text-muted-foreground/50'}`} />
-                                <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${newStackable ? 'bg-primary' : 'bg-input'}`}>
-                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-background transition-transform ${newStackable ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                                </span>
-                            </button>
-                        </div>
-                        <Button onClick={addProduct} disabled={!newName.trim() || selectedWarehouses.length === 0} size="sm" className="gap-1.5">
-                            <Plus className="h-3.5 w-3.5" />
-                            Hinzufügen
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            onClick={bulkAssignWarehouses}
-                            disabled={selectedWarehouses.length === 0 || products.length === 0}
-                            size="sm"
-                            className="gap-1.5 ml-auto bg-primary/10 text-primary hover:bg-primary/20"
-                            title="Alle Produkte den aktuell ausgewählten Lagern zuweisen"
-                        >
-                            <Warehouse className="h-3.5 w-3.5" />
-                            Alle Zuweisen
-                        </Button>
-                    </div>
+                {/* ── Actions Row ── */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <Dialog open={isAddModalOpen} onOpenChange={(open) => {
+                        setIsAddModalOpen(open);
+                        if(open) resetNewProductForm();
+                    }}>
+                        <DialogTrigger asChild>
+                            <Button className="gap-2 shrink-0">
+                                <Plus className="h-4 w-4" />
+                                Neues Produkt anlegen
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[500px]">
+                            <DialogHeader>
+                                <DialogTitle>Neues Produkt</DialogTitle>
+                                <DialogDescription>
+                                    Lege ein neues Produkt an und weise ihm sofort Lager und Eigenschaften zu.
+                                </DialogDescription>
+                            </DialogHeader>
+
+                            <div className="grid gap-6 py-4">
+                                {/* Name */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold">Name des Produkts</label>
+                                    <Input 
+                                        value={newName} 
+                                        onChange={(e) => setNewName(e.target.value)} 
+                                        placeholder="z.B. Eisen, Verbandskasten..." 
+                                        autoFocus
+                                        onKeyDown={(e) => { if (e.key === 'Enter') addProduct(); }}
+                                    />
+                                </div>
+
+                                {/* Warehouses */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold">In welchen Lagern soll es verfügbar sein?</label>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {warehouses.map(w => (
+                                            <button
+                                                key={w.id}
+                                                onClick={() => toggleWarehouse(w.id)}
+                                                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${selectedWarehouses.includes(w.id)
+                                                    ? w.type === 'leadership'
+                                                        ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
+                                                        : 'bg-primary/15 text-primary border-primary/30'
+                                                    : 'bg-muted/50 text-muted-foreground border-transparent hover:bg-muted'
+                                                    }`}
+                                            >
+                                                {w.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {selectedWarehouses.length === 0 && <p className="text-xs text-destructive mt-1">Bitte wähle mindestens ein Lager.</p>}
+                                </div>
+
+                                {/* Properties */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-3 p-3 rounded-lg bg-muted/20 border border-border/50">
+                                        <div className="flex items-center gap-2 text-sm font-semibold">
+                                            <Layers className="h-4 w-4 text-primary" />
+                                            Eigenschaften
+                                        </div>
+                                        <button
+                                            onClick={() => setNewStackable(!newStackable)}
+                                            className="flex items-center justify-between w-full hover:bg-muted/40 p-1.5 rounded-md transition-colors"
+                                        >
+                                            <div className="text-left">
+                                                <div className="text-xs font-medium text-foreground">Stapelbar</div>
+                                                <div className="text-[10px] text-muted-foreground mt-0.5 max-w-[120px]">
+                                                    {newStackable ? 'Eingabe von Mengen möglich.' : 'Menge ist immer 1 Stück.'}
+                                                </div>
+                                            </div>
+                                            <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${newStackable ? 'bg-primary' : 'bg-input'}`}>
+                                                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-background transition-transform ${newStackable ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
+                                            </span>
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-3 p-3 rounded-lg bg-gradient-to-br from-red-500/[0.03] via-amber-400/[0.03] to-emerald-500/[0.03] border border-border/50">
+                                        <div className="flex items-center gap-1.5 text-sm font-semibold">
+                                            <div className="flex items-center gap-0.5">
+                                                <span className="h-2 w-2 rounded-full bg-red-500" />
+                                                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                            </div>
+                                            Bestandsampel
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-bold text-amber-500">Ab Gelb</label>
+                                                <Input type="number" min="0" value={newYellowThreshold} onChange={e => setNewYellowThreshold(e.target.value)} className="h-7 text-xs bg-background" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-bold text-emerald-500">Ab Grün</label>
+                                                <Input type="number" min="1" value={newGreenThreshold} onChange={e => setNewGreenThreshold(e.target.value)} className="h-7 text-xs bg-background" />
+                                            </div>
+                                        </div>
+                                        <div className="pt-2">
+                                            <ZoneBar green={parseInt(newGreenThreshold)||10} yellow={parseInt(newYellowThreshold)||1} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Abbrechen</Button>
+                                <Button onClick={addProduct} disabled={!newName.trim() || selectedWarehouses.length === 0}>
+                                    Produkt Speichern
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+
+                    <Button
+                        variant="secondary"
+                        onClick={bulkAssignWarehouses}
+                        disabled={selectedWarehouses.length === 0 || products.length === 0}
+                        className="gap-1.5 bg-primary/10 text-primary hover:bg-primary/20"
+                        title="Alle Produkte den aktuell ausgewählten Lagern zuweisen (Verwendet oben im Dialog / Filter ausgewählte Lager)"
+                    >
+                        <Warehouse className="h-4 w-4" />
+                        Massen-Zuweisung Lager
+                    </Button>
                 </div>
 
                 {/* ── Bestandsampel – Global Defaults ── */}

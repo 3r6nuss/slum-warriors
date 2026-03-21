@@ -10,14 +10,21 @@ router.get('/', (req, res) => {
 
 // POST /api/products – add new product
 router.post('/', (req, res) => {
-    const { name, warehouseIds, is_stackable } = req.body;
+    const { name, warehouseIds, is_stackable, green_threshold, yellow_threshold } = req.body;
     if (!name || !name.trim()) {
         return res.status(400).json({ error: 'Produktname ist erforderlich' });
     }
 
     try {
         const stackable = is_stackable === undefined ? 1 : (is_stackable ? 1 : 0);
-        const result = db.prepare('INSERT INTO products (name, is_stackable) VALUES (?, ?)').run(name.trim(), stackable);
+        const green = green_threshold !== undefined ? parseInt(green_threshold) : 10;
+        const yellow = yellow_threshold !== undefined ? parseInt(yellow_threshold) : 1;
+
+        if (isNaN(green) || isNaN(yellow) || green < 0 || yellow < 0 || yellow >= green) {
+             return res.status(400).json({ error: 'Ungültige Schwellwerte' });
+        }
+
+        const result = db.prepare('INSERT INTO products (name, is_stackable, green_threshold, yellow_threshold) VALUES (?, ?, ?, ?)').run(name.trim(), stackable, green, yellow);
         const productId = result.lastInsertRowid;
 
         // Initialize inventory for new product only in selected warehouses
