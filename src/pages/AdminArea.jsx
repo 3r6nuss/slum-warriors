@@ -14,7 +14,7 @@ import {
     CheckCircle, AlertCircle, Swords, Clock, ScrollText, Send,
     Pencil, Check, X, Terminal, Activity, Pause, Play, RotateCcw, Wifi,
     Package, Plus, Trash2, ArrowUp, ArrowDown, Settings, Loader2,
-    GripVertical, Layers, Warehouse
+    GripVertical, Layers, Warehouse, Zap
 } from 'lucide-react';
 
 const HARDCODED_IDS = [
@@ -929,7 +929,7 @@ function ProductManagement() {
     const [newStackable, setNewStackable] = useState(true);
     const [newGreenThreshold, setNewGreenThreshold] = useState('10');
     const [newYellowThreshold, setNewYellowThreshold] = useState('1');
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [addSuccess, setAddSuccess] = useState(null);
     
     const [status, setStatus] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -1029,9 +1029,10 @@ function ProductManagement() {
             });
             const data = await res.json();
             if (res.ok) {
-                setStatus({ type: 'success', message: `"${data.name}" wurde hinzugefügt` });
-                setIsAddModalOpen(false);
-                resetNewProductForm();
+                // Flash success inline, keep focus, retain settings!
+                setAddSuccess(`+ ${data.name}`);
+                setTimeout(() => setAddSuccess(null), 2500);
+                setNewName(''); // ready for next
                 loadData();
             } else {
                 setStatus({ type: 'error', message: data.error });
@@ -1340,129 +1341,106 @@ function ProductManagement() {
                     </div>
                 )}
 
-                {/* ── Actions Row ── */}
-                <div className="flex flex-wrap items-center gap-3">
-                    <Dialog open={isAddModalOpen} onOpenChange={(open) => {
-                        setIsAddModalOpen(open);
-                        if(open) resetNewProductForm();
-                    }}>
-                        <DialogTrigger asChild>
-                            <Button className="gap-2 shrink-0">
+                {/* ── Speed-Add Row ── */}
+                <div className="p-4 rounded-xl border border-border/50 bg-muted/10 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground pb-2 border-b border-border/50">
+                        <Zap className="h-4 w-4 text-primary" />
+                        Speed-Add (Schnellanlage)
+                        <span className="ml-auto text-xs opacity-50 font-normal">Alle Einstellungen merken sich. Tippen + Enter!</span>
+                    </div>
+
+                    {/* Input Row */}
+                    <div className="flex items-center gap-3">
+                        <div className="relative flex-1 max-w-[400px]">
+                            <Input
+                                value={newName}
+                                onChange={(e) => setNewName(e.target.value)}
+                                placeholder="Produktname eingeben..."
+                                className="h-10 text-base shadow-sm pl-4 pr-12 bg-background focus-visible:ring-primary"
+                                onKeyDown={(e) => { if (e.key === 'Enter') addProduct(); }}
+                            />
+                            <Button 
+                                onClick={addProduct} 
+                                disabled={!newName.trim() || selectedWarehouses.length === 0}
+                                size="icon"
+                                className="absolute right-1 top-1 h-8 w-8"
+                            >
                                 <Plus className="h-4 w-4" />
-                                Neues Produkt anlegen
                             </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[500px]">
-                            <DialogHeader>
-                                <DialogTitle>Neues Produkt</DialogTitle>
-                                <DialogDescription>
-                                    Lege ein neues Produkt an und weise ihm sofort Lager und Eigenschaften zu.
-                                </DialogDescription>
-                            </DialogHeader>
+                        </div>
+                        {addSuccess && (
+                            <span className="text-sm font-medium text-emerald-500 animate-in fade-in slide-in-from-left-2">{addSuccess}</span>
+                        )}
 
-                            <div className="grid gap-6 py-4">
-                                {/* Name */}
-                                <div className="space-y-2">
-                                    <label className="text-sm font-semibold">Name des Produkts</label>
-                                    <Input 
-                                        value={newName} 
-                                        onChange={(e) => setNewName(e.target.value)} 
-                                        placeholder="z.B. Eisen, Verbandskasten..." 
-                                        autoFocus
-                                        onKeyDown={(e) => { if (e.key === 'Enter') addProduct(); }}
-                                    />
-                                </div>
+                        <Button
+                            variant="secondary"
+                            onClick={bulkAssignWarehouses}
+                            disabled={selectedWarehouses.length === 0 || products.length === 0}
+                            size="sm"
+                            className="ml-auto gap-1.5 bg-primary/10 text-primary hover:bg-primary/20"
+                            title="Alle existierenden Produkte den aktuell in der Speed-Add-Leiste ausgewählten Lagern zuweisen"
+                        >
+                            <Warehouse className="h-3.5 w-3.5" />
+                            Massen-Zuweisung Lager
+                        </Button>
+                    </div>
 
-                                {/* Warehouses */}
-                                <div className="space-y-2">
-                                    <label className="text-sm font-semibold">In welchen Lagern soll es verfügbar sein?</label>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        {warehouses.map(w => (
-                                            <button
-                                                key={w.id}
-                                                onClick={() => toggleWarehouse(w.id)}
-                                                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${selectedWarehouses.includes(w.id)
-                                                    ? w.type === 'leadership'
-                                                        ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
-                                                        : 'bg-primary/15 text-primary border-primary/30'
-                                                    : 'bg-muted/50 text-muted-foreground border-transparent hover:bg-muted'
-                                                    }`}
-                                            >
-                                                {w.name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    {selectedWarehouses.length === 0 && <p className="text-xs text-destructive mt-1">Bitte wähle mindestens ein Lager.</p>}
-                                </div>
-
-                                {/* Properties */}
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-3 p-3 rounded-lg bg-muted/20 border border-border/50">
-                                        <div className="flex items-center gap-2 text-sm font-semibold">
-                                            <Layers className="h-4 w-4 text-primary" />
-                                            Eigenschaften
-                                        </div>
-                                        <button
-                                            onClick={() => setNewStackable(!newStackable)}
-                                            className="flex items-center justify-between w-full hover:bg-muted/40 p-1.5 rounded-md transition-colors"
-                                        >
-                                            <div className="text-left">
-                                                <div className="text-xs font-medium text-foreground">Stapelbar</div>
-                                                <div className="text-[10px] text-muted-foreground mt-0.5 max-w-[120px]">
-                                                    {newStackable ? 'Eingabe von Mengen möglich.' : 'Menge ist immer 1 Stück.'}
-                                                </div>
-                                            </div>
-                                            <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${newStackable ? 'bg-primary' : 'bg-input'}`}>
-                                                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-background transition-transform ${newStackable ? 'translate-x-[18px]' : 'translate-x-[3px]'}`} />
-                                            </span>
-                                        </button>
-                                    </div>
-
-                                    <div className="space-y-3 p-3 rounded-lg bg-gradient-to-br from-red-500/[0.03] via-amber-400/[0.03] to-emerald-500/[0.03] border border-border/50">
-                                        <div className="flex items-center gap-1.5 text-sm font-semibold">
-                                            <div className="flex items-center gap-0.5">
-                                                <span className="h-2 w-2 rounded-full bg-red-500" />
-                                                <span className="h-2 w-2 rounded-full bg-amber-400" />
-                                                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                                            </div>
-                                            Bestandsampel
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <div className="space-y-1">
-                                                <label className="text-[10px] font-bold text-amber-500">Ab Gelb</label>
-                                                <Input type="number" min="0" value={newYellowThreshold} onChange={e => setNewYellowThreshold(e.target.value)} className="h-7 text-xs bg-background" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-[10px] font-bold text-emerald-500">Ab Grün</label>
-                                                <Input type="number" min="1" value={newGreenThreshold} onChange={e => setNewGreenThreshold(e.target.value)} className="h-7 text-xs bg-background" />
-                                            </div>
-                                        </div>
-                                        <div className="pt-2">
-                                            <ZoneBar green={parseInt(newGreenThreshold)||10} yellow={parseInt(newYellowThreshold)||1} />
-                                        </div>
-                                    </div>
-                                </div>
+                    {/* Settings Row (Sticky) */}
+                    <div className="flex flex-wrap items-center gap-6 pt-2 bg-muted/30 p-3 rounded-lg border border-border/30">
+                        {/* Warehouses */}
+                        <div className="space-y-1.5 flex-1 min-w-[200px]">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Standard-Lager für neue Produkte</label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {warehouses.map(w => (
+                                    <button
+                                        key={w.id}
+                                        onClick={() => toggleWarehouse(w.id)}
+                                        className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border ${selectedWarehouses.includes(w.id)
+                                            ? w.type === 'leadership'
+                                                ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
+                                                : 'bg-primary/15 text-primary border-primary/30'
+                                            : 'bg-muted/50 text-muted-foreground border-transparent hover:bg-muted'
+                                            }`}
+                                    >
+                                        {w.name}
+                                    </button>
+                                ))}
                             </div>
+                            {selectedWarehouses.length === 0 && <p className="text-[10px] text-destructive m-0 mt-1">Stopp! Bitte wähle mindestens ein Lager für die Zuweisung.</p>}
+                        </div>
 
-                            <DialogFooter>
-                                <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>Abbrechen</Button>
-                                <Button onClick={addProduct} disabled={!newName.trim() || selectedWarehouses.length === 0}>
-                                    Produkt Speichern
-                                </Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
+                        {/* Stackable */}
+                        <div className="space-y-1.5 shrink-0 border-l border-border/50 pl-6 hidden sm:block">
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Eigenschaften</label>
+                            <div className="flex items-center gap-2 mt-1">
+                                 <button
+                                    onClick={() => setNewStackable(!newStackable)}
+                                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                    <Layers className={`h-3.5 w-3.5 ${newStackable ? 'text-primary' : 'text-muted-foreground/50'}`} />
+                                    <span className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${newStackable ? 'bg-primary' : 'bg-input'}`}>
+                                        <span className={`inline-block h-3 w-3 transform rounded-full bg-background transition-transform ${newStackable ? 'translate-x-[14px]' : 'translate-x-[2px]'}`} />
+                                    </span>
+                                    {newStackable ? 'Stapelbar (Menge)' : 'Einzeln (1x)'}
+                                </button>
+                            </div>
+                        </div>
 
-                    <Button
-                        variant="secondary"
-                        onClick={bulkAssignWarehouses}
-                        disabled={selectedWarehouses.length === 0 || products.length === 0}
-                        className="gap-1.5 bg-primary/10 text-primary hover:bg-primary/20"
-                        title="Alle Produkte den aktuell ausgewählten Lagern zuweisen (Verwendet oben im Dialog / Filter ausgewählte Lager)"
-                    >
-                        <Warehouse className="h-4 w-4" />
-                        Massen-Zuweisung Lager
-                    </Button>
+                        {/* Thresholds */}
+                        <div className="space-y-1.5 shrink-0 border-l border-border/50 pl-6 hidden sm:block">
+                             <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Initiale Bestandsampel</label>
+                             <div className="flex items-center gap-2 mt-1">
+                                 <div className="flex items-center gap-1.5" title="Ab Gelb">
+                                     <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                     <Input type="number" min="0" value={newYellowThreshold} onChange={e => setNewYellowThreshold(e.target.value)} className="h-6 w-14 text-xs p-1 text-center bg-background" />
+                                 </div>
+                                 <div className="flex items-center gap-1.5" title="Ab Grün">
+                                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                     <Input type="number" min="1" value={newGreenThreshold} onChange={e => setNewGreenThreshold(e.target.value)} className="h-6 w-14 text-xs p-1 text-center bg-background" />
+                                 </div>
+                             </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* ── Bestandsampel – Global Defaults ── */}
