@@ -1,5 +1,4 @@
 import db from '../db.js';
-import fetch from 'node-fetch';
 
 /**
  * Sends a message/embed to the configured Discord webhook.
