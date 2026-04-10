@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import {
     Package, Shield, Warehouse, Settings, Save, X, Loader2,
     PackagePlus, PackageMinus, CheckCircle, AlertCircle, GripHorizontal, ScanLine,
-    ArrowDownToLine, ArrowUpToLine, Search, Plus
+    ArrowDownToLine, ArrowUpToLine, Search, Plus, Boxes
 } from 'lucide-react';
 
 const InventoryScanner = React.lazy(() => import('@/components/InventoryScanner'));
@@ -192,6 +192,186 @@ function TransactionDialog({ item, warehouseId, user, onClose }) {
     );
 }
 
+/* ─────────────────────── Craft Kit Dialog ─────────────────────── */
+function CraftKitDialog({ kits, kitsLoading, warehouseId, warehouseItems, user, onClose, onStatus }) {
+    const [selectedKit, setSelectedKit] = useState(null);
+    const [personName, setPersonName] = useState(user?.display_name || '');
+    const [crafting, setCrafting] = useState(false);
+    const [error, setError] = useState(null);
+
+    const stockCheck = useMemo(() => {
+        if (!selectedKit) return [];
+        return selectedKit.items.map(item => {
+            const inv = warehouseItems.find(wi => wi.product_id === item.product_id);
+            const available = inv ? inv.quantity : 0;
+            return {
+                ...item,
+                available,
+                sufficient: available >= item.quantity,
+            };
+        });
+    }, [selectedKit, warehouseItems]);
+
+    const allSufficient = stockCheck.length > 0 && stockCheck.every(s => s.sufficient);
+
+    const handleCraft = async () => {
+        if (!selectedKit || !personName.trim()) {
+            setError('Bitte Kit und Name ausfüllen');
+            return;
+        }
+        if (!allSufficient) {
+            setError('Nicht genügend Bestand für alle Items');
+            return;
+        }
+
+        setCrafting(true);
+        setError(null);
+
+        try {
+            const res = await fetch(`/api/kits/${selectedKit.id}/craft`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    warehouse_id: parseInt(warehouseId),
+                    person_name: personName.trim(),
+                }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                onStatus({ type: 'success', message: `Kit "${selectedKit.name}" gecraftet!` });
+                onClose();
+            } else {
+                setError(data.error || 'Fehler beim Craften');
+            }
+        } catch {
+            setError('Verbindungsfehler');
+        }
+        setCrafting(false);
+    };
+
+    return (
+        <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="sm:max-w-lg bg-card/95 backdrop-blur-xl border-border/50 shadow-2xl">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Boxes className="h-5 w-5 text-amber-400" />
+                        Kit craften
+                    </DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-4 py-2">
+                    {kitsLoading ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                            Kits laden...
+                        </div>
+                    ) : kits.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                            <Boxes className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                            <p>Noch keine Kits konfiguriert.</p>
+                            <p className="text-xs mt-1">Erstelle Kits im Admin-Bereich unter "Kits".</p>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Kit Selection */}
+                            <div className="space-y-1.5">
+                                <Label>Kit auswählen</Label>
+                                <div className="grid gap-2">
+                                    {kits.map(kit => (
+                                        <button
+                                            key={kit.id}
+                                            onClick={() => { setSelectedKit(kit); setError(null); }}
+                                            className={`text-left p-3 rounded-lg border-2 transition-all ${selectedKit?.id === kit.id
+                                                ? 'border-amber-500/50 bg-amber-500/10'
+                                                : 'border-border/50 hover:border-border hover:bg-muted/30'
+                                            }`}
+                                        >
+                                            <div className="font-semibold text-sm">{kit.name}</div>
+                                            {kit.description && (
+                                                <div className="text-xs text-muted-foreground mt-0.5">{kit.description}</div>
+                                            )}
+                                            <div className="flex flex-wrap gap-1 mt-1.5">
+                                                {kit.items.map(item => (
+                                                    <span key={item.id} className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
+                                                        {item.quantity}× {item.product_name}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Stock Check */}
+                            {selectedKit && (
+                                <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                    <Label>Bestandsprüfung</Label>
+                                    <div className="rounded-lg border border-border/50 divide-y divide-border/30">
+                                        {stockCheck.map(item => (
+                                            <div key={item.product_id} className="flex items-center justify-between px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    {item.sufficient ? (
+                                                        <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
+                                                    ) : (
+                                                        <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+                                                    )}
+                                                    <span className="text-sm">{item.product_name}</span>
+                                                </div>
+                                                <div className="text-sm">
+                                                    <span className={item.sufficient ? 'text-green-500' : 'text-destructive font-semibold'}>
+                                                        {item.available}
+                                                    </span>
+                                                    <span className="text-muted-foreground"> / {item.quantity} benötigt</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Person Name */}
+                            {selectedKit && (
+                                <div className="space-y-1.5 animate-in fade-in duration-200">
+                                    <Label htmlFor="craft-person">Name</Label>
+                                    <Input
+                                        id="craft-person"
+                                        placeholder="Dein Name..."
+                                        value={personName}
+                                        onChange={(e) => setPersonName(e.target.value)}
+                                    />
+                                </div>
+                            )}
+
+                            {/* Error */}
+                            {error && (
+                                <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm font-medium border border-destructive/20">
+                                    {error}
+                                </div>
+                            )}
+
+                            {/* Craft Button */}
+                            {selectedKit && (
+                                <Button
+                                    className="w-full bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+                                    onClick={handleCraft}
+                                    disabled={crafting || !allSufficient || !personName.trim()}
+                                >
+                                    {crafting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    {allSufficient
+                                        ? `"${selectedKit.name}" craften`
+                                        : 'Nicht genügend Bestand'
+                                    }
+                                </Button>
+                            )}
+                        </>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 /* ─────────────────────── Main Warehouse View ─────────────────────── */
 export default function WarehouseView() {
     const { isAdmin, isLeadership, user } = useAuth();
@@ -223,6 +403,11 @@ export default function WarehouseView() {
     const [newProductName, setNewProductName] = useState('');
     const [createProductLoading, setCreateProductLoading] = useState(false);
     const [createProductStatus, setCreateProductStatus] = useState(null);
+
+    // Kit crafting state
+    const [showCraftKit, setShowCraftKit] = useState(false);
+    const [kits, setKits] = useState([]);
+    const [kitsLoading, setKitsLoading] = useState(false);
 
     // Keyboard shortcut: "/" or "^" toggles search focus, Escape blurs
     useEffect(() => {
@@ -320,6 +505,23 @@ export default function WarehouseView() {
         setCreateProductLoading(false);
         setTimeout(() => setCreateProductStatus(null), 4000);
     }, [newProductName, warehouseId]);
+
+    // Fetch available kits
+    const loadKits = useCallback(async () => {
+        setKitsLoading(true);
+        try {
+            const res = await fetch('/api/kits', { credentials: 'include' });
+            if (res.ok) setKits(await res.json());
+        } catch {
+            console.error('Failed to load kits');
+        }
+        setKitsLoading(false);
+    }, []);
+
+    const openCraftDialog = () => {
+        loadKits();
+        setShowCraftKit(true);
+    };
 
     // We use derived state instead of an effect to initialize draggingOrder
     // If draggedIdx is active but we have no dragging order yet, initialize it
@@ -562,6 +764,15 @@ export default function WarehouseView() {
                             </div>
                             {(isAdmin || isLeadership) && (
                                 <div className="flex gap-2 relative top-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={openCraftDialog}
+                                        className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+                                    >
+                                        <Boxes className="h-4 w-4 mr-2" />
+                                        Kit craften
+                                    </Button>
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -880,6 +1091,19 @@ export default function WarehouseView() {
                         warehouseId={warehouseId}
                         user={user}
                         onClose={() => setSelectedItem(null)}
+                    />
+                )}
+
+                {/* Kit Craft Dialog */}
+                {showCraftKit && (
+                    <CraftKitDialog
+                        kits={kits}
+                        kitsLoading={kitsLoading}
+                        warehouseId={warehouseId}
+                        warehouseItems={warehouseItems}
+                        user={user}
+                        onClose={() => setShowCraftKit(false)}
+                        onStatus={(s) => { setQuickStatus(s); setTimeout(() => setQuickStatus(null), 4000); }}
                     />
                 )}
 

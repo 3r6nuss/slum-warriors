@@ -5,11 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     X, Upload, ScanLine, Loader2, CheckCircle, AlertCircle,
-    ArrowRight, Save, RotateCcw, Grid3x3, Move, Plus, Crop, Layers
+    ArrowRight, Save, RotateCcw, Grid3x3, Move, Plus, Crop,
+    PanelLeft, PanelRight, Replace, PlusCircle
 } from 'lucide-react';
 
 const STORAGE_KEY = 'scanner_grid_settings';
-const DEFAULT_GRID = { x: 52, y: 18, w: 44, h: 74 };
+const DEFAULT_GRID = { x: 5, y: 5, w: 90, h: 90 };
 const DEFAULT_COLS = 4;
 const DEFAULT_ROWS = 3;
 
@@ -21,8 +22,8 @@ function loadSavedGrid() {
     return null;
 }
 
-function saveGrid(gridPos, numCols, numRows) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ gridPos, numCols, numRows }));
+function saveGrid(gridPos, numCols, numRows, side) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ gridPos, numCols, numRows, side }));
 }
 
 /* ── Fuzzy matching ───────────────────────────────────────────── */
@@ -58,67 +59,14 @@ function bestMatch(ocrName, productNames) {
     return bestScore <= threshold ? best : null;
 }
 
-function parseGermanNumber(str) {
-    const cleaned = str.replace(/\./g, '').replace(/,/g, '').replace(/\s/g, '');
-    const num = parseInt(cleaned);
-    return isNaN(num) || num < 0 ? 0 : num;
-}
-
-
-
-/* ── Crop & Preprocess helper ─────────────────────────────────── */
-function preprocessCrop(canvas, x, y, w, h) {
-    const SCALE = 3;
-    const c = document.createElement('canvas');
-    const width = Math.max(1, Math.round(w));
-    const height = Math.max(1, Math.round(h));
-
-    // Create scaled canvas
-    c.width = width * SCALE;
-    c.height = height * SCALE;
-    const ctx = c.getContext('2d');
-
-    // Smooth scaling for OCR
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
-    // Draw the crop upscaled
-    ctx.drawImage(canvas,
-        Math.round(x), Math.round(y), width, height,
-        0, 0, c.width, c.height);
-
-    // Apply Grayscale and Binarization to enhance text contrast
-    const imageData = ctx.getImageData(0, 0, c.width, c.height);
-    const data = imageData.data;
-
-    for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-
-        // Binarize: Make light pixels black (text), dark pixels white (background)
-        const isLight = lum > 130;
-        const val = isLight ? 0 : 255;
-
-        data[i] = val;
-        data[i + 1] = val;
-        data[i + 2] = val;
-        data[i + 3] = 255; // fully opaque
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-    return c.toDataURL('image/png');
-}
-
 
 /* ══════════════════════════════════════════════════════════════════
-   Main Component – Interactive Grid Overlay Scanner
+   Main Component – Server-Side OCR Scanner
    ══════════════════════════════════════════════════════════════════ */
 export default function InventoryScanner({ warehouseItems, warehouseId, user, onClose }) {
     // Image state
-    const [imagePreview, setImagePreview] = useState(null);
-    const [imgNaturalSize, setImgNaturalSize] = useState(null); // { w, h }
+    const [imageFile, setImageFile] = useState(null);       // raw File/Blob for upload
+    const [imagePreview, setImagePreview] = useState(null);  // data URL for display
 
     // Grid overlay state (in % of image) – load from localStorage
     const savedGrid = loadSavedGrid();
@@ -127,10 +75,14 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     const [numRows, setNumRows] = useState(savedGrid?.numRows || DEFAULT_ROWS);
     const [gridSaved, setGridSaved] = useState(false);
 
+    // Side selection: which side of the screenshot contains the inventory
+    const [side, setSide] = useState(savedGrid?.side || 'left');
+
+    // Mode: "set" = overwrite stock, "add" = add to existing stock
+    const [scanMode, setScanMode] = useState('set');
+
     // Scan state
     const [scanning, setScanning] = useState(false);
-    const [progress, setProgress] = useState(0);
-    const [progressLabel, setProgressLabel] = useState('');
 
     // Results
     const [allResults, setAllResults] = useState([]); // accumulated across screenshots
@@ -138,9 +90,6 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     const [applying, setApplying] = useState(false);
     const [applyStatus, setApplyStatus] = useState(null);
     const [personName, setPersonName] = useState(user?.display_name || user?.username || '');
-
-    // Modes
-    const [isAddMode] = useState(false);
 
     // Drag state
     const [dragging, setDragging] = useState(null); // 'move' | 'resize' | null
@@ -154,39 +103,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     /* ── File handling ─────────────────────────────────────────── */
     const handleFile = useCallback((file) => {
         if (!file || !file.type.startsWith('image/')) return;
+        setImageFile(file);
         const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                // Determine the right panel crop boundaries (right ~60% of the image)
-                // This isolates the storage/warehouse panel in the GTA interface
-                const cropX = img.naturalWidth * 0.40; // Start at 40% from the left
-                const cropY = 0;
-                const cropW = img.naturalWidth - cropX;
-                const cropH = img.naturalHeight;
-
-                // Create a temporary canvas to perform the crop
-                const canvas = document.createElement('canvas');
-                canvas.width = cropW;
-                canvas.height = cropH;
-                const ctx = canvas.getContext('2d');
-
-                // Draw only the right portion of the original image onto the canvas
-                ctx.drawImage(
-                    img,
-                    cropX, cropY, cropW, cropH, // Source rectangle
-                    0, 0, cropW, cropH          // Destination rectangle
-                );
-
-                // Export the cropped image
-                const croppedDataUrl = canvas.toDataURL('image/png');
-
-                // Update state with the *cropped* image dimensions and source
-                setImgNaturalSize({ w: cropW, h: cropH });
-                setImagePreview(croppedDataUrl);
-            };
-            img.src = e.target.result;
-        };
+        reader.onload = (e) => setImagePreview(e.target.result);
         reader.readAsDataURL(file);
     }, []);
 
@@ -266,125 +185,44 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
         };
     }, [dragging, dragStart, getMousePct]);
 
-    /* ── Run scan on current screenshot ───────────────────────── */
+    /* ── Run scan via server ──────────────────────────────────── */
     const runScan = async () => {
-        if (!imagePreview || !imgNaturalSize) return;
+        if (!imageFile) return;
         setScanning(true);
-        setProgress(0);
-        setProgressLabel('Lade Tesseract.js...');
-
-        let workerNum = null;
-        let workerName = null;
 
         try {
-            const Tesseract = await import('tesseract.js');
+            const formData = new FormData();
+            formData.append('image', imageFile);
+            formData.append('side', side);
+            formData.append('grid_x', gridPos.x.toString());
+            formData.append('grid_y', gridPos.y.toString());
+            formData.append('grid_w', gridPos.w.toString());
+            formData.append('grid_h', gridPos.h.toString());
+            formData.append('cols', numCols.toString());
+            formData.append('rows', numRows.toString());
 
-            // Load image onto canvas at full resolution
-            const img = new Image();
-            img.src = imagePreview;
-            await new Promise(r => { img.onload = r; });
-
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-            canvas.getContext('2d').drawImage(img, 0, 0);
-
-            // Convert grid position from % to pixels
-            const gx = (gridPos.x / 100) * canvas.width;
-            const gy = (gridPos.y / 100) * canvas.height;
-            const gw = (gridPos.w / 100) * canvas.width;
-            const gh = (gridPos.h / 100) * canvas.height;
-
-            const cellW = gw / numCols;
-            const cellH = gh / numRows;
-
-            const totalCells = numCols * numRows;
-            setProgressLabel('Initialisiere Tesseract Worker...');
-            setProgress(3);
-
-            workerNum = await Tesseract.createWorker('eng');
-            await workerNum.setParameters({
-                tessedit_char_whitelist: '0123456789.,',
-                tessedit_pageseg_mode: '7'
-            });
-            workerName = await Tesseract.createWorker('deu+eng');
-            await workerName.setParameters({
-                tessedit_pageseg_mode: '7'
+            const res = await fetch('/api/scanner/scan', {
+                method: 'POST',
+                body: formData,
             });
 
-            setProgressLabel(`${totalCells} Zellen scannen...`);
-            setProgress(5);
-
-            const newResults = [];
-
-            for (let row = 0; row < numRows; row++) {
-                for (let col = 0; col < numCols; col++) {
-                    const cellX = gx + col * cellW;
-                    const cellY = gy + row * cellH;
-                    const cellIdx = row * numCols + col + 1;
-
-                    setProgress(5 + Math.round((cellIdx / totalCells) * 85));
-                    setProgressLabel(`Zelle ${cellIdx}/${totalCells}...`);
-
-                    // Crop the NUMBER BADGE area (top ~25% of cell, centered)
-                    const numCrop = preprocessCrop(canvas, cellX + cellW * 0.2, cellY, cellW * 0.6, cellH * 0.25);
-
-                    // Crop the NAME area (bottom ~28% of cell)
-                    const nameCrop = preprocessCrop(canvas, cellX, cellY + cellH * 0.72, cellW, cellH * 0.28);
-
-                    let quantity = null, name = null;
-
-                    try {
-                        // OCR the number region
-                        const numResult = await workerNum.recognize(numCrop);
-                        const numText = numResult.data.text.trim();
-                        if (numText) {
-                            const parsed = parseGermanNumber(numText);
-                            if (parsed > 0) quantity = parsed;
-                        }
-                    } catch { /* skip */ }
-
-                    try {
-                        // OCR the name region
-                        const nameResult = await workerName.recognize(nameCrop);
-
-                        // Clean up common OCR artifacts
-                        const nameText = nameResult.data.text
-                            .replace(/[|><'"”`_~-]/g, ' ')
-                            .replace(/\s+/g, ' ')
-                            .trim();
-
-                        if (nameText && /[a-zA-ZäöüÄÖÜß]/.test(nameText) && nameText.length >= 3) {
-                            name = nameText;
-                        }
-                    } catch { /* skip */ }
-
-                    // For non-stackable items: if name matches a non-stackable product, set qty=1
-                    if (name && quantity === null) {
-                        const match = bestMatch(name, productNames);
-                        const wi = match ? warehouseItems.find(w => w.product_name === match) : null;
-                        if (wi && !wi.is_stackable) {
-                            quantity = 1;
-                        }
-                    }
-
-                    console.log(`Cell [${row},${col}]: qty=${quantity}, name="${name}"`);
-
-                    if (quantity !== null && name) {
-                        newResults.push({ name, quantity });
-                    }
-                }
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Server-Fehler' }));
+                throw new Error(err.error || `HTTP ${res.status}`);
             }
 
-            // Accumulate results (sum non-stackables, update duplicates for stackables)
+            const data = await res.json();
+            const newResults = data.items || [];
+
+            // Accumulate results
             const accumResults = [...allResults];
             for (const item of newResults) {
                 const existIdx = accumResults.findIndex(m => m.name.toLowerCase() === item.name.toLowerCase());
                 if (existIdx >= 0) {
                     const match = bestMatch(item.name, productNames);
                     const wi = match ? warehouseItems.find(w => w.product_name === match) : null;
-                    if ((wi && !wi.is_stackable) || isAddMode) {
-                        // Sum quantities for non-stackable items, or if global Add Mode is active
+                    if (wi && !wi.is_stackable) {
+                        // Sum quantities for non-stackable items
                         accumResults[existIdx] = { ...item, quantity: accumResults[existIdx].quantity + item.quantity };
                     } else {
                         // Overwrite for stackable items
@@ -397,15 +235,13 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
 
             setAllResults(accumResults);
 
-            setProgress(95);
-            setProgressLabel('Abgleich...');
-
+            // Match against products
             const matched = accumResults.map(item => {
                 const match = bestMatch(item.name, productNames);
                 const wi = match ? warehouseItems.find(w => w.product_name === match) : null;
 
                 let targetQty = item.quantity;
-                if (isAddMode && wi) {
+                if (scanMode === 'add' && wi) {
                     targetQty = wi.quantity + item.quantity;
                 }
 
@@ -428,20 +264,19 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                     accepted: false, notScanned: true,
                 }));
 
-            setProgress(100);
-            setProgressLabel('Fertig!');
             setScanResults({ matched, unscanned, scanCount: accumResults.length });
+
+            // Clear image so user can load next screenshot
+            setImagePreview(null);
+            setImageFile(null);
 
         } catch (err) {
             console.error('Scan error:', err);
             setScanResults({ error: err.message });
         } finally {
-            if (workerNum) await workerNum.terminate();
-            if (workerName) await workerName.terminate();
             setScanning(false);
         }
     };
-
 
 
     /* ── Apply ────────────────────────────────────────────────── */
@@ -459,7 +294,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     warehouse_id: parseInt(warehouseId), person_name: personName,
-                    reason: 'Inventar-Scanner Abgleich', changes,
+                    reason: `Inventar-Scanner Abgleich (${scanMode === 'add' ? 'Hinzufügen' : 'Setzen'})`, changes,
                 }),
             });
             const data = await res.json();
@@ -547,9 +382,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
     };
 
     const reset = () => {
-        setImagePreview(null); setImgNaturalSize(null);
+        setImagePreview(null); setImageFile(null);
         setScanResults(null); setApplyStatus(null);
-        setAllResults([]); setProgress(0);
+        setAllResults([]); 
     };
 
     const acceptedChanges = scanResults?.matched?.filter(r => r.accepted && r.diff !== 0 && r.diff !== null) || [];
@@ -571,7 +406,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                         <div>
                             <h3 className="text-lg font-bold">Inventar Scanner</h3>
                             <p className="text-xs text-muted-foreground">
-                                Grid über die Items ziehen → scannen → scrollen → nochmal scannen
+                                Screenshot einfügen → Seite & Grid anpassen → scannen
                             </p>
                         </div>
                     </div>
@@ -589,6 +424,67 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+                    {/* ── Side + Mode Selection ────────────────────── */}
+                    <div className="flex items-center gap-3 flex-wrap">
+                        {/* Side toggle */}
+                        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-secondary/50 border border-border/30">
+                            <button
+                                onClick={() => setSide('left')}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    side === 'left'
+                                        ? 'bg-violet-500 text-white shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                <PanelLeft className="h-3.5 w-3.5" />
+                                Links
+                            </button>
+                            <button
+                                onClick={() => setSide('right')}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    side === 'right'
+                                        ? 'bg-violet-500 text-white shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                <PanelRight className="h-3.5 w-3.5" />
+                                Rechts
+                            </button>
+                        </div>
+
+                        {/* Mode toggle */}
+                        <div className="flex items-center gap-1.5 p-1 rounded-lg bg-secondary/50 border border-border/30">
+                            <button
+                                onClick={() => setScanMode('set')}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    scanMode === 'set'
+                                        ? 'bg-blue-500 text-white shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                <Replace className="h-3.5 w-3.5" />
+                                Auf Wert setzen
+                            </button>
+                            <button
+                                onClick={() => setScanMode('add')}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    scanMode === 'add'
+                                        ? 'bg-emerald-500 text-white shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                <PlusCircle className="h-3.5 w-3.5" />
+                                Hinzufügen
+                            </button>
+                        </div>
+
+                        <span className="text-[10px] text-muted-foreground">
+                            {scanMode === 'set' 
+                                ? 'Bestand wird auf den gescannten Wert überschrieben' 
+                                : 'Gescannte Mengen werden zum aktuellen Bestand addiert'}
+                        </span>
+                    </div>
 
                     {/* Upload area */}
                     {!imagePreview && !scanResults && (
@@ -664,7 +560,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                     <Button
                                         variant="outline" size="sm"
                                         className="h-7 text-xs gap-1"
-                                        onClick={() => { saveGrid(gridPos, numCols, numRows); setGridSaved(true); setTimeout(() => setGridSaved(false), 2000); }}
+                                        onClick={() => { saveGrid(gridPos, numCols, numRows, side); setGridSaved(true); setTimeout(() => setGridSaved(false), 2000); }}
                                     >
                                         <Save className="h-3 w-3" />
                                         {gridSaved ? 'Gespeichert!' : 'Speichern'}
@@ -702,6 +598,14 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                         />
                                     </div>
                                 ))}
+
+                                {/* Side indicator on image */}
+                                <div className="ml-auto flex items-center gap-1.5">
+                                    <Crop className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <span className="text-[10px] text-muted-foreground">
+                                        Scannt die <strong className="text-violet-400">{side === 'left' ? 'linke' : 'rechte'}</strong> Bildhälfte
+                                    </span>
+                                </div>
                             </div>
 
                             {/* Image container with overlay */}
@@ -718,22 +622,25 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                     style={{ maxHeight: '50vh', objectFit: 'contain' }}
                                 />
 
-                                {/* Semi-transparent dark overlay outside the grid */}
+                                {/* Dim the inactive side */}
                                 <div className="absolute inset-0 pointer-events-none"
                                     style={{
-                                        background: `
-                                            linear-gradient(to right, rgba(0,0,0,0.5) ${gridPos.x}%, transparent ${gridPos.x}%, transparent ${gridPos.x + gridPos.w}%, rgba(0,0,0,0.5) ${gridPos.x + gridPos.w}%),
-                                            linear-gradient(to bottom, rgba(0,0,0,0.5) ${gridPos.y}%, transparent ${gridPos.y}%, transparent ${gridPos.y + gridPos.h}%, rgba(0,0,0,0.5) ${gridPos.y + gridPos.h}%)
-                                        `
+                                        background: side === 'left'
+                                            ? 'linear-gradient(to right, transparent 50%, rgba(0,0,0,0.6) 50%)'
+                                            : 'linear-gradient(to right, rgba(0,0,0,0.6) 50%, transparent 50%)'
                                     }}
                                 />
 
-                                {/* Grid overlay */}
+                                {/* Grid overlay — positioned relative to the selected side */}
                                 <div
                                     className="absolute border-2 border-violet-400/80"
                                     style={{
-                                        left: `${gridPos.x}%`, top: `${gridPos.y}%`,
-                                        width: `${gridPos.w}%`, height: `${gridPos.h}%`,
+                                        left: side === 'left'
+                                            ? `${gridPos.x / 2}%`
+                                            : `${50 + gridPos.x / 2}%`,
+                                        top: `${gridPos.y}%`,
+                                        width: `${gridPos.w / 2}%`,
+                                        height: `${gridPos.h}%`,
                                     }}
                                 >
                                     {/* Move handle (center) */}
@@ -758,7 +665,7 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                         />
                                     ))}
 
-                                    {/* Show which part of each cell will be scanned (number region + name region) */}
+                                    {/* Show which part of each cell will be scanned */}
                                     {Array.from({ length: numCols * numRows }, (_, i) => {
                                         const col = i % numCols, row = Math.floor(i / numCols);
                                         const cw = 100 / numCols, ch = 100 / numRows;
@@ -795,15 +702,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
 
                             {/* Scan button */}
                             {scanning ? (
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-3">
-                                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                                        <span className="text-sm font-medium">{progressLabel}</span>
-                                    </div>
-                                    <div className="w-full bg-secondary rounded-full h-2 overflow-hidden">
-                                        <div className="bg-gradient-to-r from-violet-500 to-blue-500 h-full rounded-full transition-all duration-300"
-                                            style={{ width: `${progress}%` }} />
-                                    </div>
+                                <div className="flex items-center justify-center gap-3 p-4 rounded-xl bg-secondary/30 border border-border/30">
+                                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                    <span className="text-sm font-medium">Server scannt {numCols * numRows} Zellen...</span>
                                 </div>
                             ) : (
                                 <Button onClick={runScan} className="w-full" size="lg">
@@ -836,6 +737,9 @@ export default function InventoryScanner({ warehouseItems, warehouseId, user, on
                                 )}
                                 <Badge variant="outline" className="text-xs py-1 px-2.5">
                                     {scanResults.scanCount} total gescannt
+                                </Badge>
+                                <Badge variant={scanMode === 'add' ? 'success' : 'default'} className="text-xs py-1 px-2.5">
+                                    {scanMode === 'add' ? '➕ Hinzufügen' : '🔄 Setzen'}
                                 </Badge>
                             </div>
 

@@ -3,6 +3,8 @@ services:
     build: .
     container_name: slum-warriors
     restart: unless-stopped
+    depends_on:
+      - ocr-service
     volumes:
       - slum-warriors-data:/app/data
     environment:
@@ -13,6 +15,14 @@ services:
       - DISCORD_CLIENT_SECRET=A-mHq0cHPnOaIIh03GvCi1rebJn3ciu8
       - DISCORD_REDIRECT_URI=https://nochnaya.3r6nuss.de/auth/callback
       - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1479919998674665653/p6t5j7ICPOJSZxV6TOqB90V1Q-XZDJo2Y4IjT6GD3pY1ZAK2UG8T2vPsSZFiqWen-O5M
+      - OCR_SERVICE_URL=http://ocr-service:8000
+    networks:
+      - nginx-proxy-manager_default
+
+  ocr-service:
+    build: ./ocr-service
+    container_name: slum-warriors-ocr
+    restart: unless-stopped
     networks:
       - nginx-proxy-manager_default
 

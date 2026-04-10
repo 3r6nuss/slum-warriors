@@ -114,6 +114,21 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS kits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+
+  CREATE TABLE IF NOT EXISTS kit_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kit_id INTEGER NOT NULL REFERENCES kits(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    quantity INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(kit_id, product_id)
+  );
 `);
 
 // Migration: Add 'approved' column to users table if missing

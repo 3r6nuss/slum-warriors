@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
     Swords, Shield, Warehouse,
     Users, Package, FileText, Terminal, Activity, Settings,
-    History, BarChart3
+    History, BarChart3, Boxes
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import UserProfile from './UserProfile';
@@ -103,6 +103,9 @@ export default function Sidebar({ open, onClose }) {
                                 </NavLink>
                                 <NavLink to="/admin/products" onClick={onClose} className={navLinkStyle}>
                                     <Package className="h-4 w-4" /> Produkte
+                                </NavLink>
+                                <NavLink to="/admin/kits" onClick={onClose} className={navLinkStyle}>
+                                    <Boxes className="h-4 w-4" /> Kits
                                 </NavLink>
                                 <NavLink to="/admin/logs" onClick={onClose} className={navLinkStyle}>
                                     <FileText className="h-4 w-4" /> System-Logs
