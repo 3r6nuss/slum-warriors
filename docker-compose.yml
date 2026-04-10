@@ -3,8 +3,6 @@ services:
     build: .
     container_name: slum-warriors
     restart: unless-stopped
-    depends_on:
-      - ocr-service
     volumes:
       - slum-warriors-data:/app/data
     environment:
