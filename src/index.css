@@ -2,43 +2,43 @@
 
 @layer base {
   :root {
-    --background: 0 10% 8%;
-    --foreground: 45 15% 90%;
-    --card: 0 10% 11%;
-    --card-foreground: 45 15% 90%;
-    --popover: 0 10% 11%;
-    --popover-foreground: 45 15% 90%;
-    --primary: 42 78% 50%;
-    --primary-foreground: 0 10% 5%;
-    --secondary: 0 10% 16%;
-    --secondary-foreground: 45 15% 90%;
-    --muted: 0 10% 16%;
-    --muted-foreground: 0 5% 60%;
-    --accent: 42 78% 50%;
-    --accent-foreground: 0 10% 5%;
-    --destructive: 0 62% 50%;
+    --background: 0 0% 3%; /* Tiefschwarz */
+    --foreground: 0 0% 98%; /* Strahlendes Weiß für maximale Lesbarkeit */
+    --card: 0 0% 6%; /* Sehr dunkles Schwarz-Grau für Karten */
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 43 85% 55%; /* Strahlendes Kronen-Gold für Hauptaktionen */
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 100% 8%; /* Sein #280000 für Info-Boxen & Badges */
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 70%; /* Ruhiges Grau für unwichtigere Texte */
+    --accent: 0 80% 18%; /* Hell-roter Hover-Effekt (rote Akzente) */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 85% 50%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 10% 20%;
-    --input: 0 10% 20%;
-    --ring: 42 78% 50%;
+    --border: 0 80% 20%; /* Rötliche Rahmen geben den "rote Akzente" Look */
+    --input: 0 60% 18%;
+    --ring: 0 80% 40%;
     --radius: 0.75rem;
     --success: 142 71% 45%;
     --success-foreground: 0 0% 98%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 98%;
-    --chart-1: 42 78% 50%;
-    --chart-2: 15 70% 50%;
+    --chart-1: 43 85% 55%;
+    --chart-2: 0 100% 25%;
     --chart-3: 142 71% 45%;
     --chart-4: 280 65% 60%;
     --chart-5: 0 62% 50%;
-    --sidebar-background: 0 10% 6%;
-    --sidebar-foreground: 45 15% 80%;
-    --sidebar-primary: 42 78% 50%;
-    --sidebar-primary-foreground: 0 10% 5%;
-    --sidebar-accent: 0 10% 14%;
-    --sidebar-accent-foreground: 45 15% 90%;
-    --sidebar-border: 0 10% 18%;
-    --sidebar-ring: 42 78% 50%;
+    --sidebar-background: 0 100% 8%; /* Sidebar komplett in #280000! */
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 43 85% 55%; /* Gold in der Sidebar */
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 90% 16%; /* Leuchtend roter Hover in der Menüleiste */
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 80% 20%; /* Roter Trennstrich */
+    --sidebar-ring: 0 80% 40%;
   }
 }
 
