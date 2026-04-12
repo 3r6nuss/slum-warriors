@@ -32,7 +32,7 @@ app.use(requestLoggerMiddleware);
 
 // Session middleware
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'slum-warriors-secret-key-2026',
+    secret: process.env.SESSION_SECRET || 'nochnaya-krone-secret-key-2026',
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -114,7 +114,7 @@ startWeeklyStatsJob();
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, '0.0.0.0', () => {
-    log('SERVER', `Slum Warriors Lagerverwaltung API läuft auf Port ${PORT}`);
+    log('SERVER', `Nochnaya Krone Lagerverwaltung API läuft auf Port ${PORT}`);
     log('SERVER', `Mode: ${isProduction ? 'Production' : 'Development'}`);
     log('SERVER', `WebSocket verfügbar auf ws://0.0.0.0:${PORT}`);
 });

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Swords, LogIn, Loader2, Clock, RefreshCw, LogOut } from 'lucide-react';
+import { Crown, LogIn, Loader2, Clock, RefreshCw, LogOut } from 'lucide-react';
 
 // Discord OAuth callback component
 export function AuthCallback() {
@@ -51,10 +51,10 @@ export function LoginPage() {
                 <CardHeader className="text-center">
                     <div className="flex justify-center mb-4">
                         <div className="p-4 rounded-xl bg-primary/10">
-                            <Swords className="h-10 w-10 text-primary" />
+                            <Crown className="h-10 w-10 text-primary" />
                         </div>
                     </div>
-                    <CardTitle className="text-2xl">Slum Warriors</CardTitle>
+                    <CardTitle className="text-2xl">Nochnaya Krone</CardTitle>
                     <CardDescription>
                         Melde dich mit Discord an, um auf die Lagerverwaltung zuzugreifen
                     </CardDescription>

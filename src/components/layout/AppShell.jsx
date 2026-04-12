@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Menu, Swords } from 'lucide-react';
+import { Menu, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Sidebar from './Sidebar';
 
@@ -28,8 +28,8 @@ export default function AppShell() {
                             <Menu className="h-5 w-5" />
                         </Button>
                         <div className="flex items-center gap-2 lg:hidden">
-                            <Swords className="h-5 w-5 text-primary" />
-                            <span className="font-semibold text-sm">Slum Warriors</span>
+                            <Crown className="h-5 w-5 text-primary" />
+                            <span className="font-semibold text-sm">Nochnaya Krone</span>
                         </div>
                     </div>
                 </header>

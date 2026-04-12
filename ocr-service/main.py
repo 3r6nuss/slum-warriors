@@ -1,5 +1,5 @@
 """
-OCR Microservice for Slum Warriors Inventory Scanner.
+OCR Microservice for Nochnaya Krone Inventory Scanner.
 Receives a game screenshot, crops a grid of inventory cells,
 and returns recognized item names + quantities as JSON.
 """
@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down OCR service.")
 
 
-app = FastAPI(title="Slum Warriors OCR Service", lifespan=lifespan)
+app = FastAPI(title="Nochnaya Krone OCR Service", lifespan=lifespan)
 
 
 # ── Health check ─────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-    Swords, Shield, Warehouse,
+    Crown, Shield, Warehouse,
     Users, Package, FileText, Terminal, Activity, Settings,
     History, BarChart3, Boxes
 } from 'lucide-react';
@@ -33,11 +33,11 @@ export default function Sidebar({ open, onClose }) {
                 <div className="p-6 border-b border-sidebar-border">
                     <div className="flex items-center gap-3">
                         <div className="p-2 rounded-lg bg-sidebar-primary/10">
-                            <Swords className="h-6 w-6 text-sidebar-primary" />
+                            <Crown className="h-6 w-6 text-sidebar-primary" />
                         </div>
                         <div>
                             <h2 className="font-bold text-lg text-sidebar-foreground" style={{ fontFamily: "'Outfit', sans-serif" }}>
-                                Slum Warriors
+                                Nochnaya Krone
                             </h2>
                             <p className="text-xs text-sidebar-foreground/60">Lagerverwaltung</p>
                         </div>

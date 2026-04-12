@@ -1,10 +1,10 @@
 services:
-  slum-warriors:
+  nochnaya-krone:
     build: .
-    container_name: slum-warriors
+    container_name: nochnaya-krone
     restart: unless-stopped
     volumes:
-      - slum-warriors-data:/app/data
+      - nochnaya-krone-data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3001
@@ -19,13 +19,13 @@ services:
 
   ocr-service:
     build: ./ocr-service
-    container_name: slum-warriors-ocr
+    container_name: nochnaya-krone-ocr
     restart: unless-stopped
     networks:
       - nginx-proxy-manager_default
 
 volumes:
-  slum-warriors-data:
+  nochnaya-krone-data:
 
 
 networks:
