@@ -82,6 +82,9 @@ export default function Sidebar({ open, onClose }) {
                                 <NavLink to="/lager/4" onClick={onClose} className={navLinkStyle}>
                                     <Shield className="h-4 w-4" /> Führungs-Waffen
                                 </NavLink>
+                                <NavLink to="/members" onClick={onClose} className={navLinkStyle}>
+                                    <Users className="h-4 w-4" /> Mitglieder
+                                </NavLink>
                                 <NavLink to="/logs" onClick={onClose} className={navLinkStyle}>
                                     <History className="h-4 w-4" /> Lager-Historie
                                 </NavLink>

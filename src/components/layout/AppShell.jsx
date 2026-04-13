@@ -8,6 +8,7 @@ import WarehouseView from '@/pages/WarehouseView';
 import AdminArea from '@/pages/AdminArea';
 import StatsView from '@/pages/StatsView';
 import LogView from '@/pages/LogView';
+import MembersView from '@/pages/MembersView';
 
 export default function AppShell() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -39,6 +40,7 @@ export default function AppShell() {
                         <Route path="/" element={<Navigate to="/lager/2" replace />} />
                         <Route path="/lager" element={<Navigate to="/lager/2" replace />} />
                         <Route path="/lager/:id" element={<WarehouseView />} />
+                        <Route path="/members" element={<MembersView />} />
                         <Route path="/stats" element={<StatsView />} />
                         <Route path="/logs" element={<LogView />} />
                         <Route path="/admin" element={<Navigate to="/admin/roles" replace />} />

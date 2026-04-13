@@ -129,6 +129,28 @@ db.exec(`
     quantity INTEGER NOT NULL DEFAULT 1,
     UNIQUE(kit_id, product_id)
   );
+
+  CREATE TABLE IF NOT EXISTS discord_members (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    discord_id TEXT NOT NULL UNIQUE,
+    username TEXT NOT NULL,
+    display_name TEXT,
+    avatar TEXT,
+    discord_roles TEXT DEFAULT '[]',
+    custom_name TEXT,
+    system_role TEXT,
+    joined_at TEXT,
+    last_synced TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+
+  CREATE TABLE IF NOT EXISTS discord_roles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    color INTEGER DEFAULT 0,
+    position INTEGER DEFAULT 0,
+    last_synced TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
 `);
 
 // Migration: Add 'approved' column to users table if missing

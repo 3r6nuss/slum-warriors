@@ -14,6 +14,8 @@ services:
       - DISCORD_REDIRECT_URI=https://nochnaya.3r6nuss.de/auth/callback
       - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1479919998674665653/p6t5j7ICPOJSZxV6TOqB90V1Q-XZDJo2Y4IjT6GD3pY1ZAK2UG8T2vPsSZFiqWen-O5M
       - OCR_SERVICE_URL=http://ocr-service:8000
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - DISCORD_GUILD_ID=1480172872063520819
     networks:
       - nginx-proxy-manager_default
 
@@ -26,6 +28,7 @@ services:
 
 volumes:
   nochnaya-krone-data:
+    name: nochnaya-krone-data
 
 
 networks:
