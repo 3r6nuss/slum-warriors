@@ -80,6 +80,11 @@ export default function Sidebar({ open, onClose }) {
                                     <Shield className="h-4 w-4" /> Führungs-Waffen
                                 </NavLink>
                                 {isModerator && (
+                                    <NavLink to="/lager/5" onClick={onClose} className={navLinkStyle}>
+                                        <Shield className="h-4 w-4" /> Erw. Führungslager
+                                    </NavLink>
+                                )}
+                                {isModerator && (
                                     <NavLink to="/stats" onClick={onClose} className={navLinkStyle}>
                                         <BarChart3 className="h-4 w-4" /> Statistiken
                                     </NavLink>

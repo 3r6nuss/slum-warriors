@@ -220,6 +220,9 @@ if (!warehouseNames.includes('Waffenlager')) {
 if (!warehouseNames.includes('Führungswaffenlager')) {
   insertWarehouse.run('Führungswaffenlager', 'leadership');
 }
+if (!warehouseNames.includes('Erweitertes Führungslager')) {
+  insertWarehouse.run('Erweitertes Führungslager', 'normal');
+}
 
 
 

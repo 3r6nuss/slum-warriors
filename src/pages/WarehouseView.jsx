@@ -22,6 +22,7 @@ const warehouseMeta = {
     2: { label: 'Normales Lager', icon: Warehouse, type: 'normal' },
     3: { label: 'Waffenlager', icon: Warehouse, type: 'normal' },
     4: { label: 'Führungswaffenlager', icon: Shield, type: 'leadership' },
+    5: { label: 'Erweitertes Führungslager', icon: Shield, type: 'moderator' },
 };
 
 /* ─────────────────────── Transaction Dialog ─────────────────────── */
@@ -374,7 +375,7 @@ function CraftKitDialog({ kits, kitsLoading, warehouseId, warehouseItems, user, 
 
 /* ─────────────────────── Main Warehouse View ─────────────────────── */
 export default function WarehouseView() {
-    const { isAdmin, isLeadership, user } = useAuth();
+    const { isAdmin, isLeadership, isModerator, user } = useAuth();
     const { inventory, connected } = useInventorySocket();
     const { id } = useParams();
     const warehouseId = id || '2'; // Default to "Normales Lager"
@@ -716,6 +717,17 @@ export default function WarehouseView() {
         );
     }
 
+    // Authorization check for moderator warehouses
+    if (meta.type === 'moderator' && !isModerator) {
+        return (
+            <div className="flex flex-col items-center justify-center py-20">
+                <Shield className="h-16 w-16 text-muted-foreground mb-4" />
+                <h2 className="text-2xl font-bold mb-2">Zugriff verweigert</h2>
+                <p className="text-muted-foreground">Dieser Bereich ist nur für Moderatoren und Admins zugänglich.</p>
+            </div>
+        );
+    }
+
     const Icon = meta.icon;
 
     return (
@@ -762,7 +774,7 @@ export default function WarehouseView() {
                                     </p>
                                 )}
                             </div>
-                            {(isAdmin || isLeadership) && (
+                            {isAdmin && (
                                 <div className="flex gap-2 relative top-2">
                                     <Button
                                         variant="outline"
