@@ -2027,13 +2027,39 @@ function SettingsManagement() {
     const [settings, setSettings] = useState({});
     const [loading, setLoading] = useState(true);
     const [status, setStatus] = useState(null);
+    const [discordRoles, setDiscordRoles] = useState([]);
+    const [roleMappings, setRoleMappings] = useState([]);
+    const [savingMappings, setSavingMappings] = useState(false);
+
+    const SYSTEM_ROLES = [
+        { value: 'admin', label: 'Admin' },
+        { value: 'führung', label: 'Führung' },
+        { value: 'moderator', label: 'Moderator' },
+        { value: 'member', label: 'Mitglied' },
+        { value: 'viewer', label: 'Zuschauer' },
+    ];
+
+    const intToHex = (num) => {
+        if (!num || num === 0) return null;
+        return '#' + num.toString(16).padStart(6, '0');
+    };
 
     const loadSettings = async () => {
         try {
-            const res = await fetch('/api/admin/settings', { credentials: 'include' });
-            if (res.ok) {
-                const data = await res.json();
+            const [settingsRes, rolesRes] = await Promise.all([
+                fetch('/api/admin/settings', { credentials: 'include' }),
+                fetch('/api/admin/discord-roles', { credentials: 'include' }),
+            ]);
+            if (settingsRes.ok) {
+                const data = await settingsRes.json();
                 setSettings(data);
+                try {
+                    const mappings = data.role_mappings ? JSON.parse(data.role_mappings) : [];
+                    setRoleMappings(mappings);
+                } catch { setRoleMappings([]); }
+            }
+            if (rolesRes.ok) {
+                setDiscordRoles(await rolesRes.json());
             }
         } catch (err) {
             console.error('Failed to load settings', err);
@@ -2045,10 +2071,7 @@ function SettingsManagement() {
 
     const toggleSetting = async (key, currentValue) => {
         const newValue = currentValue === 'true' ? 'false' : 'true';
-
-        // Optimistic update
         setSettings(prev => ({ ...prev, [key]: newValue }));
-
         try {
             const res = await fetch('/api/admin/settings', {
                 method: 'PUT',
@@ -2056,7 +2079,6 @@ function SettingsManagement() {
                 credentials: 'include',
                 body: JSON.stringify({ key, value: newValue })
             });
-
             if (res.ok) {
                 setStatus({ type: 'success', message: 'Einstellung gespeichert' });
                 setTimeout(() => setStatus(null), 3000);
@@ -2065,8 +2087,43 @@ function SettingsManagement() {
             }
         } catch {
             setStatus({ type: 'error', message: 'Fehler beim Speichern' });
-            loadSettings(); // revert
+            loadSettings();
         }
+    };
+
+    const addMapping = () => {
+        setRoleMappings(prev => [...prev, { discord_role_id: '', system_role: 'member' }]);
+    };
+
+    const removeMapping = (index) => {
+        setRoleMappings(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const updateMapping = (index, field, value) => {
+        setRoleMappings(prev => prev.map((m, i) => i === index ? { ...m, [field]: value } : m));
+    };
+
+    const saveMappings = async () => {
+        setSavingMappings(true);
+        const validMappings = roleMappings.filter(m => m.discord_role_id && m.system_role);
+        try {
+            const res = await fetch('/api/admin/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ key: 'role_mappings', value: JSON.stringify(validMappings) })
+            });
+            if (res.ok) {
+                setRoleMappings(validMappings);
+                setStatus({ type: 'success', message: 'Rollen-Zuordnung gespeichert' });
+                setTimeout(() => setStatus(null), 3000);
+            } else {
+                throw new Error('Save failed');
+            }
+        } catch {
+            setStatus({ type: 'error', message: 'Fehler beim Speichern der Zuordnung' });
+        }
+        setSavingMappings(false);
     };
 
     if (loading) return <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></div>;
@@ -2074,49 +2131,121 @@ function SettingsManagement() {
     const webhookEnabled = settings.webhook_enabled === 'true';
 
     return (
-        <Card className="backdrop-blur-sm bg-card/80 border-border/50 max-w-2xl">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Settings className="h-5 w-5 text-primary" />
-                    System-Einstellungen
-                </CardTitle>
-                <CardDescription>Globale App-Einstellungen konfigurieren</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {status && (
-                    <div className={`mb-6 flex items-center gap-2 p-3 rounded-lg ${status.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
-                        {status.type === 'success' ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
-                        <span className="text-sm font-medium">{status.message}</span>
-                    </div>
-                )}
+        <div className="space-y-6 max-w-3xl">
+            {status && (
+                <div className={`flex items-center gap-2 p-3 rounded-lg ${status.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                    {status.type === 'success' ? <CheckCircle className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
+                    <span className="text-sm font-medium">{status.message}</span>
+                </div>
+            )}
 
-                <div className="space-y-6">
-                    {/* Webhook Toggle */}
+            {/* Webhook Toggle */}
+            <Card className="backdrop-blur-sm bg-card/80 border-border/50">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Send className="h-5 w-5 text-primary" />
+                        Discord Webhooks
+                    </CardTitle>
+                    <CardDescription>Automatische Benachrichtigungen in den Discord-Kanal</CardDescription>
+                </CardHeader>
+                <CardContent>
                     <div className="flex items-center justify-between p-4 rounded-xl border bg-card hover:bg-muted/30 transition-colors">
                         <div className="space-y-1">
-                            <h3 className="font-semibold text-sm flex items-center gap-2">
-                                <Send className="h-4 w-4 text-muted-foreground" />
-                                Discord Webhooks
-                            </h3>
+                            <h3 className="font-semibold text-sm">Webhooks aktiv</h3>
                             <p className="text-sm text-muted-foreground max-w-sm">
-                                Aktiviert oder deaktiviert alle automatischen Benachrichtigungen in den Discord-Kanal (Ein-/Auslagerungen, etc.).
+                                Aktiviert oder deaktiviert alle automatischen Benachrichtigungen (Ein-/Auslagerungen, etc.).
                             </p>
                         </div>
                         <button
                             onClick={() => toggleSetting('webhook_enabled', settings.webhook_enabled)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${webhookEnabled ? 'bg-primary' : 'bg-input'
-                                }`}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${webhookEnabled ? 'bg-primary' : 'bg-input'}`}
                         >
                             <span className="sr-only">Toggle Webhook</span>
-                            <span
-                                className={`inline-block h-5 w-5 transform rounded-full bg-background transition-transform ${webhookEnabled ? 'translate-x-6' : 'translate-x-1'
-                                    }`}
-                            />
+                            <span className={`inline-block h-5 w-5 transform rounded-full bg-background transition-transform ${webhookEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
                     </div>
-                </div>
-            </CardContent>
-        </Card>
+                </CardContent>
+            </Card>
+
+            {/* Role Mapping */}
+            <Card className="backdrop-blur-sm bg-card/80 border-border/50">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Shield className="h-5 w-5 text-primary" />
+                        Automatische Rollenzuordnung
+                    </CardTitle>
+                    <CardDescription>
+                        Discord-Rollen werden beim Login automatisch zu System-Rollen zugeordnet. Neue Benutzer werden sofort freigeschaltet wenn ein Mapping greift.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {discordRoles.length === 0 ? (
+                        <div className="text-center py-8 border border-dashed rounded-xl">
+                            <p className="text-muted-foreground text-sm">
+                                Keine Discord-Rollen gefunden. Bitte zuerst unter <strong>Rollenverwaltung → Mitglieder</strong> die Discord-Daten synchronisieren.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {roleMappings.map((mapping, index) => (
+                                <div key={index} className="flex items-center gap-3 p-3 rounded-xl border bg-card hover:border-primary/30 transition-colors">
+                                    <div className="flex-1">
+                                        <Select value={mapping.discord_role_id} onValueChange={(v) => updateMapping(index, 'discord_role_id', v)}>
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Discord-Rolle wählen..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {discordRoles.map(role => (
+                                                    <SelectItem key={role.role_id} value={role.role_id}>
+                                                        <span className="flex items-center gap-2">
+                                                            <span className="inline-block w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: intToHex(role.color) || '#6b7280' }} />
+                                                            {role.name}
+                                                        </span>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <span className="text-muted-foreground text-lg shrink-0">→</span>
+                                    <div className="flex-1">
+                                        <Select value={mapping.system_role} onValueChange={(v) => updateMapping(index, 'system_role', v)}>
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="System-Rolle..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {SYSTEM_ROLES.map(sr => (
+                                                    <SelectItem key={sr.value} value={sr.value}>{sr.label}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <Button variant="ghost" size="icon" className="shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => removeMapping(index)}>
+                                        <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            ))}
+
+                            <div className="flex items-center gap-3 pt-2">
+                                <Button variant="outline" size="sm" className="gap-1.5" onClick={addMapping}>
+                                    <Plus className="h-3.5 w-3.5" />
+                                    Zuordnung hinzufügen
+                                </Button>
+                                <Button size="sm" className="gap-1.5" onClick={saveMappings} disabled={savingMappings}>
+                                    {savingMappings ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                    Speichern
+                                </Button>
+                            </div>
+
+                            {roleMappings.length > 0 && (
+                                <p className="text-xs text-muted-foreground mt-2">
+                                    Bei mehreren Zuordnungen wird die höchste System-Rolle zugewiesen (Admin &gt; Führung &gt; Moderator &gt; Mitglied &gt; Zuschauer).
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
     );
 }
 

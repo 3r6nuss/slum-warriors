@@ -99,4 +99,14 @@ router.put('/settings', requireAdmin, (req, res) => {
     }
 });
 
+// GET /api/admin/discord-roles – return synced Discord roles (for role mapping UI)
+router.get('/discord-roles', requireAdmin, (req, res) => {
+    try {
+        const roles = db.prepare('SELECT role_id, name, color, position FROM discord_roles ORDER BY position DESC').all();
+        res.json(roles);
+    } catch {
+        res.status(500).json({ error: 'Failed to load Discord roles' });
+    }
+});
+
 export default router;

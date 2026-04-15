@@ -99,3 +99,37 @@ export async function fetchGuildRoles() {
             position: role.position,
         }));
 }
+/**
+ * Fetches a single guild member by their Discord ID.
+ * Returns null if the user is not on the server.
+ */
+export async function fetchGuildMember(discordId) {
+    if (!DISCORD_GUILD_ID) {
+        throw new Error('DISCORD_GUILD_ID is not configured');
+    }
+    if (!DISCORD_BOT_TOKEN) {
+        throw new Error('DISCORD_BOT_TOKEN is not configured');
+    }
+
+    try {
+        const member = await discordApiRequest(
+            `/guilds/${DISCORD_GUILD_ID}/members/${discordId}`
+        );
+
+        return {
+            discord_id: member.user.id,
+            username: member.user.username,
+            display_name: member.nick || member.user.global_name || null,
+            avatar: member.user.avatar,
+            roles: member.roles || [],
+            joined_at: member.joined_at || null,
+            is_bot: member.user.bot || false,
+        };
+    } catch (err) {
+        // 404 means user is not on the server
+        if (err.message.includes('404')) {
+            return null;
+        }
+        throw err;
+    }
+}
