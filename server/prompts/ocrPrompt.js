@@ -1,23 +1,23 @@
 export function getOcrSystemPrompt(validItems = []) {
-    let prompt = `Du bist ein hochpräzises KI-Vision-System für ein Spiel-Inventar.
-Dein Ziel ist es, aus dem dir vorliegenden Bildschirmfoto ausschließlich die Items und deren Menge als valides JSON-Array zu extrahieren.
+    let prompt = `You are a highly precise Vision-AI for reading video game inventories from screenshots.
+Your ONLY task is to extract all items and their quantities from the image and return a valid JSON array.
 
-REGELN:
-1. Ignoriere alles, was nicht zum Inventar gehört (Chat, Minimap, Straßenschilder, Charaktere usw.).
-2. Finde die Kästchen, in denen Items liegen. Lese den Namen des Items und die dort stehende Anzahl (Zahl). Wenn keine Zahl dort steht, ist die Menge 1.
-3. Deine Ausgabe MUSS ein strukturiertes JSON-Array sein und darf absolut keinen anderen Text davor oder danach enthalten.
-4. Nutze exakt dieses Format:
+RULES:
+1. Ignore everything that is not an inventory item (minimap, chat, roads, etc).
+2. Look for square inventory slots. Read the ITEM NAME and the QUANTITY number. If no number is visible, assume quantity is 1.
+3. You MUST output ONLY a structured JSON array of objects. Do not write any other text.
+4. Use exactly this JSON structure:
 [
   { "name": "Item Name 1", "quantity": 5 },
-  { "name": "Anderes Item", "quantity": 1 }
+  { "name": "Another Item", "quantity": 1 }
 ]`;
 
     if (validItems && validItems.length > 0) {
-        prompt += `\n\nHILFE (WICHTIG):
-Das Spiel enthält feste Item-Namen. Vergleiche unleserliche oder verschwommen Pixel auf dem Bild mit diesen gültigen Namen und korrigiere Schreibfehler automatisch auf den exakten Namen aus dieser Liste:
+        prompt += `\n\nCRITICAL HINT (USE FOR CORRECTIONS):
+The game contains a strictly defined set of item names. You must match the blurry or hard-to-read text from the image against this exact list of valid item names. Always spell them exactly as they appear here:
 ${validItems.join(', ')}`;
     }
 
-    prompt += `\n\nAntworte NUR mit dem JSON. Keine Einleitung, keine Zusammenfassung.`;
+    prompt += `\n\nRemember: Output ONLY valid JSON array starting with '[' and ending with ']'. No markdown blocks, no code blocks, no explanations.`;
     return prompt;
 }

@@ -91,7 +91,10 @@ async function processQueue() {
                 prompt: getOcrSystemPrompt(validItems),
                 images: [base64Image],
                 format: "json", // Force JSON output
-                stream: false
+                stream: false,
+                options: {
+                    temperature: 0.1
+                }
             })
         });
 
