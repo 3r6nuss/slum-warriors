@@ -30,7 +30,17 @@ router.post('/scan', async (req, res) => {
             return res.status(400).json({ error: 'No image data provided' });
         }
 
-        const jobId = queueJob(imageBuffer);
+        let validItems = [];
+        try {
+            // Lazy load DB internally to avoid circular dependencies if any
+            const db = (await import('../db.js')).default;
+            const rows = db.prepare('SELECT product_name FROM products').all();
+            validItems = rows.map(r => r.product_name);
+        } catch (dbErr) {
+            log('ERROR', `Could not fetch product names for OCR prompt: ${dbErr.message}`);
+        }
+
+        const jobId = queueJob(imageBuffer, validItems);
         res.json({ jobId, status: 'pending' });
 
     } catch (err) {

@@ -3,7 +3,7 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 import { log } from '../logger.js';
-import { OCR_SYSTEM_PROMPT } from '../prompts/ocrPrompt.js';
+import { getOcrSystemPrompt } from '../prompts/ocrPrompt.js';
 
 // In-memory queue
 const jobs = new Map();
@@ -16,9 +16,10 @@ const OLLAMA_MODEL = 'llama3.2-vision:latest';
 /**
  * Adds an image to the OCR queue.
  * @param {Buffer} imageBuffer - Raw image buffer
+ * @param {string[]} validItems - List of valid product names for few-shot prompting
  * @returns {string} jobId
  */
-export function queueJob(imageBuffer) {
+export function queueJob(imageBuffer, validItems = []) {
     const jobId = uuidv4();
     jobs.set(jobId, {
         id: jobId,
@@ -28,7 +29,7 @@ export function queueJob(imageBuffer) {
         timestamp: Date.now()
     });
 
-    queue.push({ jobId, imageBuffer });
+    queue.push({ jobId, imageBuffer, validItems });
     log('SCANNER', `Job ${jobId} added to queue. Queue length: ${queue.length}`);
     
     // Start processing if not already running
@@ -58,7 +59,7 @@ async function processQueue() {
     }
 
     isProcessing = true;
-    const { jobId, imageBuffer } = queue.shift();
+    const { jobId, imageBuffer, validItems } = queue.shift();
     const job = jobs.get(jobId);
     
     if (!job) {
@@ -72,7 +73,7 @@ async function processQueue() {
     try {
         // Optimize and resize image using sharp to reduce LLM workload
         const optimizedBuffer = await sharp(imageBuffer)
-            .resize({ width: 1200, withoutEnlargement: true })
+            .resize({ width: 1920, withoutEnlargement: true })
             .jpeg({ quality: 80 })
             .toBuffer();
 
@@ -87,7 +88,7 @@ async function processQueue() {
             },
             body: JSON.stringify({
                 model: OLLAMA_MODEL,
-                prompt: OCR_SYSTEM_PROMPT,
+                prompt: getOcrSystemPrompt(validItems),
                 images: [base64Image],
                 format: "json", // Force JSON output
                 stream: false

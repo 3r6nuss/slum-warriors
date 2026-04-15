@@ -1,4 +1,5 @@
-export const OCR_SYSTEM_PROMPT = `Du bist ein hochpräzises KI-Vision-System für ein Spiel-Inventar.
+export function getOcrSystemPrompt(validItems = []) {
+    let prompt = `Du bist ein hochpräzises KI-Vision-System für ein Spiel-Inventar.
 Dein Ziel ist es, aus dem dir vorliegenden Bildschirmfoto ausschließlich die Items und deren Menge als valides JSON-Array zu extrahieren.
 
 REGELN:
@@ -9,6 +10,14 @@ REGELN:
 [
   { "name": "Item Name 1", "quantity": 5 },
   { "name": "Anderes Item", "quantity": 1 }
-]
+]`;
 
-Antworte NUR mit dem JSON. Keine Einleitung, keine Zusammenfassung.`;
+    if (validItems && validItems.length > 0) {
+        prompt += `\n\nHILFE (WICHTIG):
+Das Spiel enthält feste Item-Namen. Vergleiche unleserliche oder verschwommen Pixel auf dem Bild mit diesen gültigen Namen und korrigiere Schreibfehler automatisch auf den exakten Namen aus dieser Liste:
+${validItems.join(', ')}`;
+    }
+
+    prompt += `\n\nAntworte NUR mit dem JSON. Keine Einleitung, keine Zusammenfassung.`;
+    return prompt;
+}
