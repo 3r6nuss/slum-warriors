@@ -45,6 +45,27 @@ router.post('/', (req, res) => {
         res.status(201).json({ id: productId, name: name.trim() });
     } catch (err) {
         if (err.message.includes('UNIQUE')) {
+            // If the product already exists, simply add it to the selected warehouses
+            const existingProduct = db.prepare('SELECT id, name FROM products WHERE LOWER(name) = LOWER(?)').get(name.trim());
+            if (existingProduct) {
+                if (warehouseIds && Array.isArray(warehouseIds)) {
+                    const insertInventory = db.prepare('INSERT OR IGNORE INTO inventory (warehouse_id, product_id, quantity) VALUES (?, ?, 0)');
+                    for (const whId of warehouseIds) {
+                        insertInventory.run(whId, existingProduct.id);
+                    }
+                } else {
+                    const warehouses = db.prepare('SELECT id FROM warehouses').all();
+                    const insertInventory = db.prepare('INSERT OR IGNORE INTO inventory (warehouse_id, product_id, quantity) VALUES (?, ?, 0)');
+                    for (const wh of warehouses) {
+                        insertInventory.run(wh.id, existingProduct.id);
+                    }
+                }
+                return res.status(200).json({ 
+                    id: existingProduct.id, 
+                    name: existingProduct.name, 
+                    message: 'Produkt war bereits im System und wurde in die ausgewählten Lager übernommen.' 
+                });
+            }
             return res.status(409).json({ error: 'Produkt existiert bereits' });
         }
         res.status(500).json({ error: err.message });
