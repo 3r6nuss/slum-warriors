@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth';
 import UserProfile from './UserProfile';
 
 export default function Sidebar({ open, onClose }) {
-    const { isAdmin, isLeadership } = useAuth();
+    const { isAdmin, isLeadership, isModerator } = useAuth();
 
     const navLinkStyle = ({ isActive }) =>
         `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
@@ -61,9 +61,6 @@ export default function Sidebar({ open, onClose }) {
                             <NavLink to="/lager/3" onClick={onClose} className={navLinkStyle}>
                                 <Warehouse className="h-4 w-4" /> Waffenlager
                             </NavLink>
-                            <NavLink to="/stats" onClick={onClose} className={navLinkStyle}>
-                                <BarChart3 className="h-4 w-4" /> Statistiken
-                            </NavLink>
                         </div>
                     </div>
 
@@ -82,9 +79,11 @@ export default function Sidebar({ open, onClose }) {
                                 <NavLink to="/lager/4" onClick={onClose} className={navLinkStyle}>
                                     <Shield className="h-4 w-4" /> Führungs-Waffen
                                 </NavLink>
-                                <NavLink to="/members" onClick={onClose} className={navLinkStyle}>
-                                    <Users className="h-4 w-4" /> Mitglieder
-                                </NavLink>
+                                {isModerator && (
+                                    <NavLink to="/stats" onClick={onClose} className={navLinkStyle}>
+                                        <BarChart3 className="h-4 w-4" /> Statistiken
+                                    </NavLink>
+                                )}
                                 <NavLink to="/logs" onClick={onClose} className={navLinkStyle}>
                                     <History className="h-4 w-4" /> Lager-Historie
                                 </NavLink>

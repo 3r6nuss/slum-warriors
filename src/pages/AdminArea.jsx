@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import MembersView from '@/pages/MembersView';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -30,7 +31,7 @@ const ROLE_CONFIG = {
     pending: { label: 'Ausstehend', icon: Clock, color: 'destructive', description: 'Wartet auf Freischaltung' },
 };
 
-function RoleManagement() {
+function RoleManagementTable() {
     const [users, setUsers] = useState([]);
     const [status, setStatus] = useState(null);
     const [editingName, setEditingName] = useState(null); // { userId, value }
@@ -126,16 +127,8 @@ function RoleManagement() {
     };
 
     return (
-        <Card className="backdrop-blur-sm bg-card/80 border-border/50">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-primary" />
-                    Rollenverwaltung
-                </CardTitle>
-                <CardDescription>{users.length} registrierte Benutzer</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {status && (
+        <>
+            {status && (
                     <div className={`mb-4 flex items-center gap-2 p-3 rounded-lg ${status.type === 'success' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
                         }`}>
                         {status.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
@@ -294,6 +287,35 @@ function RoleManagement() {
                         )}
                     </TableBody>
                 </Table>
+        </>
+    );
+}
+
+function RoleManagement() {
+    return (
+        <Card className="backdrop-blur-sm bg-card/80 border-border/50">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary" />
+                    Rollenverwaltung & Mitglieder
+                </CardTitle>
+                <CardDescription>Benutzerrollen verwalten und Discord-Mitglieder einsehen</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Tabs defaultValue="roles" className="w-full">
+                    <TabsList className="mb-4">
+                        <TabsTrigger value="roles">Rollenverwaltung</TabsTrigger>
+                        <TabsTrigger value="members">Mitglieder</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="roles">
+                        <RoleManagementTable />
+                    </TabsContent>
+
+                    <TabsContent value="members">
+                        <MembersView />
+                    </TabsContent>
+                </Tabs>
             </CardContent>
         </Card>
     );

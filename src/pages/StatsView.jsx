@@ -1,9 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
-import { Package, Users, Activity, TrendingUp } from 'lucide-react';
+import { Package, Users, Activity, TrendingUp, ShieldCheck } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 
 export default function StatsView() {
+    const { isModerator } = useAuth();
+
+    if (!isModerator) {
+        return (
+            <div className="flex flex-col items-center justify-center py-20">
+                <ShieldCheck className="h-16 w-16 text-muted-foreground mb-4" />
+                <h2 className="text-2xl font-bold mb-2">Zugriff verweigert</h2>
+                <p className="text-muted-foreground">Statistiken sind nur für Moderatoren und Admins sichtbar.</p>
+            </div>
+        );
+    }
     const [stats, setStats] = useState(null);
     const [activity, setActivity] = useState(null);
     const [loading, setLoading] = useState(true);
