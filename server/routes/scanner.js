@@ -1,21 +1,14 @@
 import express from 'express';
 import { log } from '../logger.js';
+import { queueJob, getJobStatus } from '../services/ocrQueue.js';
 
 export const router = express.Router();
 
-const OCR_SERVICE_URL = process.env.OCR_SERVICE_URL || 'http://localhost:8000';
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 
-// POST /api/scanner/scan — Forward image to OCR microservice
+// POST /api/scanner/scan — Accepts raw image binary and queues OCR job
 router.post('/scan', async (req, res) => {
     try {
-        // Read raw body as buffer (image is sent as multipart from frontend)
-        const contentType = req.headers['content-type'];
-        if (!contentType || !contentType.includes('multipart/form-data')) {
-            return res.status(400).json({ error: 'Content-Type must be multipart/form-data' });
-        }
-
-        // Collect all chunks
         const chunks = [];
         let totalSize = 0;
 
@@ -32,41 +25,37 @@ router.post('/scan', async (req, res) => {
             req.on('error', reject);
         });
 
-        const body = Buffer.concat(chunks);
-
-        // Forward the entire multipart request to the OCR service
-        const ocrResponse = await fetch(`${OCR_SERVICE_URL}/scan`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': contentType,
-            },
-            body: body,
-        });
-
-        if (!ocrResponse.ok) {
-            const errorText = await ocrResponse.text();
-            log('ERROR', `OCR service error: ${ocrResponse.status} - ${errorText}`);
-            return res.status(ocrResponse.status).json({
-                error: `OCR service error: ${errorText}`,
-            });
+        const imageBuffer = Buffer.concat(chunks);
+        if (imageBuffer.length === 0) {
+            return res.status(400).json({ error: 'No image data provided' });
         }
 
-        const result = await ocrResponse.json();
-        log('SCANNER', `OCR scan complete: ${result.items?.length || 0} items found`);
-        res.json(result);
+        const jobId = queueJob(imageBuffer);
+        res.json({ jobId, status: 'pending' });
 
     } catch (err) {
-        log('ERROR', `Scanner proxy error: ${err.message}`);
-        res.status(500).json({ error: err.message });
+        log('ERROR', `Scanner queue error: ${err.message}`);
+        if (!res.headersSent) {
+            res.status(500).json({ error: err.message });
+        }
     }
 });
 
-// GET /api/scanner/health — Check OCR service status
+// GET /api/scanner/job/:id — Poll job status
+router.get('/job/:id', (req, res) => {
+    const job = getJobStatus(req.params.id);
+    if (!job) {
+        return res.status(404).json({ error: 'Job not found or expired' });
+    }
+    res.json(job);
+});
+
+// GET /api/scanner/health — Check Ollama status
 router.get('/health', async (req, res) => {
     try {
-        const ocrResponse = await fetch(`${OCR_SERVICE_URL}/health`);
-        const data = await ocrResponse.json();
-        res.json({ proxy: 'ok', ocr_service: data });
+        const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+        const ping = await fetch(OLLAMA_URL);
+        res.json({ proxy: 'ok', ocr_service: { status: ping.ok ? 'ok' : 'error' } });
     } catch (err) {
         res.json({ proxy: 'ok', ocr_service: { status: 'unreachable', error: err.message } });
     }

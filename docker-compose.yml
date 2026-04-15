@@ -13,22 +13,28 @@ services:
       - DISCORD_CLIENT_SECRET=A-mHq0cHPnOaIIh03GvCi1rebJn3ciu8
       - DISCORD_REDIRECT_URI=https://nochnaya.3r6nuss.de/auth/callback
       - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1479919998674665653/p6t5j7ICPOJSZxV6TOqB90V1Q-XZDJo2Y4IjT6GD3pY1ZAK2UG8T2vPsSZFiqWen-O5M
-      - OCR_SERVICE_URL=http://ocr-service:8000
+      - OLLAMA_URL=http://ollama:11434
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       - DISCORD_GUILD_ID=1480172872063520819
     networks:
       - nginx-proxy-manager_default
 
-  ocr-service:
-    build: ./ocr-service
-    container_name: nochnaya-krone-ocr
+  ollama:
+    image: ollama/ollama:latest
+    container_name: nochnaya-ollama
     restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_OMP_NUM_THREADS=10
     networks:
       - nginx-proxy-manager_default
 
 volumes:
   nochnaya-krone-data:
     name: nochnaya-krone-data
+  ollama_data:
+    name: nochnaya-ollama-data
 
 
 networks:
