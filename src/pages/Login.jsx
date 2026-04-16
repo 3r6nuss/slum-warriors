@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Crown, LogIn, Loader2, Clock, RefreshCw, LogOut } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Crown, LogIn, Loader2, Clock, RefreshCw, LogOut, Key } from 'lucide-react';
 
 // Discord OAuth callback component
 export function AuthCallback() {
@@ -36,14 +37,36 @@ export function AuthCallback() {
 
 // Login page component
 export function LoginPage() {
-    const { login, isLoggedIn } = useAuth();
+    const { login, isLoggedIn, loginWithToken } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const error = searchParams.get('error');
+    const [errorMsg, setErrorMsg] = useState(searchParams.get('error'));
+    const [tokenInput, setTokenInput] = useState('');
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
 
     useEffect(() => {
         if (isLoggedIn) navigate('/');
     }, [isLoggedIn, navigate]);
+
+    // Auto-login if token is in URL
+    useEffect(() => {
+        const token = searchParams.get('token');
+        if (token && !isLoggedIn) {
+            handleTokenLogin(token);
+        }
+    }, [searchParams, isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleTokenLogin = async (token) => {
+        setIsLoggingIn(true);
+        setErrorMsg(null);
+        try {
+            await loginWithToken(token);
+            navigate('/');
+        } catch (err) {
+            setErrorMsg(err.message || 'Token-Anmeldung fehlgeschlagen');
+            setIsLoggingIn(false);
+        }
+    };
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -60,19 +83,57 @@ export function LoginPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {error && (
+                    {errorMsg && (
                         <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm text-center">
-                            Anmeldung fehlgeschlagen. Bitte versuche es erneut.
+                            {errorMsg === 'auth_failed' ? 'Anmeldung fehlgeschlagen. Bitte versuche es erneut.' : errorMsg}
                         </div>
                     )}
-                    <Button
-                        onClick={login}
-                        className="w-full gap-2"
-                        size="lg"
-                    >
-                        <LogIn className="h-5 w-5" />
-                        Mit Discord anmelden
-                    </Button>
+                    
+                    {isLoggingIn ? (
+                        <div className="flex flex-col items-center justify-center py-4 space-y-4">
+                            <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                            <p className="text-sm text-muted-foreground">Logge ein...</p>
+                        </div>
+                    ) : (
+                        <>
+                            <Button
+                                onClick={login}
+                                className="w-full gap-2"
+                                size="lg"
+                            >
+                                <LogIn className="h-5 w-5" />
+                                Mit Discord anmelden
+                            </Button>
+
+                            <div className="relative my-4">
+                                <div className="absolute inset-0 flex items-center">
+                                    <span className="w-full border-t border-border" />
+                                </div>
+                                <div className="relative flex justify-center text-xs uppercase">
+                                    <span className="bg-card px-2 text-muted-foreground">Oder</span>
+                                </div>
+                            </div>
+
+                            <div className="flex space-x-2">
+                                <Input 
+                                    placeholder="Login-Token eingeben..." 
+                                    value={tokenInput}
+                                    onChange={(e) => setTokenInput(e.target.value)}
+                                    type="password"
+                                    onKeyDown={(e) => e.key === 'Enter' && tokenInput && handleTokenLogin(tokenInput)}
+                                />
+                                <Button 
+                                    variant="outline" 
+                                    onClick={() => handleTokenLogin(tokenInput)}
+                                    disabled={!tokenInput}
+                                    className="gap-2"
+                                >
+                                    <Key className="h-4 w-4" />
+                                    Einloggen
+                                </Button>
+                            </div>
+                        </>
+                    )}
                 </CardContent>
             </Card>
         </div>

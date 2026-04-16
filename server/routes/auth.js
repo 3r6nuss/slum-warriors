@@ -253,6 +253,47 @@ router.get('/me', (req, res) => {
     res.json({ user: null });
 });
 
+// POST /api/auth/login-with-token – Login using a backup token
+router.post('/login-with-token', (req, res) => {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token fehlt' });
+
+    try {
+        const user = db.prepare(`SELECT * FROM users WHERE login_token = ? AND login_token_expires_at > datetime('now', 'localtime')`).get(token);
+        
+        if (!user) {
+            return res.status(401).json({ error: 'Ungültiger oder abgelaufener Token' });
+        }
+
+        if (!user.approved && user.role !== 'admin') {
+             return res.status(403).json({ error: 'Benutzer ist noch nicht freigeschaltet' });
+        }
+
+        // Establish session
+        req.session.user = {
+            id: user.id,
+            discord_id: user.discord_id,
+            username: user.username,
+            display_name: user.display_name || null,
+            avatar: user.avatar,
+            role: user.role,
+            approved: user.approved,
+        };
+
+        // Extend expiration by 30 days and clear old session logic
+        db.prepare(`UPDATE users SET login_token_expires_at = datetime('now', '+30 days', 'localtime'), updated_at = datetime('now', 'localtime') WHERE id = ?`).run(user.id);
+        
+        // Log action
+        db.prepare('INSERT INTO auth_logs (user_id, username, action, ip_address) VALUES (?, ?, ?, ?)').run(user.id, user.username, 'login', req.ip);
+
+        res.json({ success: true, user: req.session.user });
+
+    } catch (err) {
+        log('ERROR', `Token login failed: ${err.message}`);
+        res.status(500).json({ error: 'Systemfehler beim Token-Login' });
+    }
+});
+
 // POST /api/auth/logout – clear session
 router.post('/logout', (req, res) => {
     if (req.session.user) {

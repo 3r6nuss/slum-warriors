@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
     Users, RefreshCw, Search, Pencil, Check, X, Crown,
     Swords, Shield, User, Eye, Loader2, ChevronDown, ChevronRight,
-    UserCircle, Hash
+    UserCircle, Hash, Key, CheckCircle, Copy
 } from 'lucide-react';
 
 const SYSTEM_ROLE_CONFIG = {
@@ -97,6 +97,29 @@ export default function MembersView() {
             }
         } catch {
             setStatus({ type: 'error', message: 'Fehler beim Setzen des Namens' });
+        }
+    };
+
+    const generateToken = async (memberId) => {
+        setStatus(null);
+        try {
+            const res = await fetch(`/api/members/${memberId}/token`, {
+                method: 'POST',
+                credentials: 'include',
+            });
+            const data = await res.json();
+            if (res.ok) {
+                try {
+                    await navigator.clipboard.writeText(data.link);
+                    setStatus({ type: 'success', message: 'Login-Link kopiert!' });
+                } catch (e) {
+                    setStatus({ type: 'success', message: 'Link generiert: ' + data.link });
+                }
+            } else {
+                setStatus({ type: 'error', message: data.error });
+            }
+        } catch (err) {
+            setStatus({ type: 'error', message: 'Fehler beim Generieren des Tokens' });
         }
     };
 
@@ -329,6 +352,7 @@ export default function MembersView() {
                                                     setEditingName={setEditingName}
                                                     setCustomName={setCustomName}
                                                     setSystemRole={setSystemRole}
+                                                    generateToken={generateToken}
                                                 />
                                             ))}
                                         </div>
@@ -371,6 +395,7 @@ export default function MembersView() {
                                                 setEditingName={setEditingName}
                                                 setCustomName={setCustomName}
                                                 setSystemRole={setSystemRole}
+                                                generateToken={generateToken}
                                             />
                                         ))}
                                     </div>
@@ -398,6 +423,7 @@ export default function MembersView() {
                                     setEditingName={setEditingName}
                                     setCustomName={setCustomName}
                                     setSystemRole={setSystemRole}
+                                    generateToken={generateToken}
                                 />
                             ))}
                         </div>
@@ -408,7 +434,7 @@ export default function MembersView() {
     );
 }
 
-function MemberRow({ member, roles, editingName, setEditingName, setCustomName, setSystemRole }) {
+function MemberRow({ member, roles, editingName, setEditingName, setCustomName, setSystemRole, generateToken }) {
     const memberRoles = JSON.parse(member.discord_roles || '[]');
     const memberRoleNames = memberRoles.map(rid => {
         const r = roles.find(role => role.role_id === rid);
@@ -526,6 +552,19 @@ function MemberRow({ member, roles, editingName, setEditingName, setCustomName, 
                         ))}
                     </SelectContent>
                 </Select>
+            </div>
+
+            {/* Actions */}
+            <div className="shrink-0 flex items-center justify-end w-8">
+                <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-amber-500 hover:text-amber-400 hover:bg-amber-500/10"
+                    onClick={() => generateToken(member.id)}
+                    title="Login-Link (Token) generieren und in die Zwischenablage kopieren"
+                >
+                    <Key className="h-4 w-4" />
+                </Button>
             </div>
         </div>
     );

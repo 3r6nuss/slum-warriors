@@ -166,6 +166,12 @@ if (!userColumns.find(c => c.name === 'display_name')) {
   db.exec(`ALTER TABLE users ADD COLUMN display_name TEXT DEFAULT NULL`);
 }
 
+// Migration: Add login_token columns for backup auth if missing
+if (!userColumns.find(c => c.name === 'login_token')) {
+  db.exec(`ALTER TABLE users ADD COLUMN login_token TEXT UNIQUE`);
+  db.exec(`ALTER TABLE users ADD COLUMN login_token_expires_at TEXT`);
+}
+
 // Migration: Add 'archived' column to products table if missing
 const productCols = db.prepare("PRAGMA table_info(products)").all();
 if (!productCols.find(c => c.name === 'archived')) {

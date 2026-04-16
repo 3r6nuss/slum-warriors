@@ -39,6 +39,21 @@ export function AuthProvider({ children }) {
         return false;
     };
 
+    const loginWithToken = async (token) => {
+        const res = await fetch('/api/auth/login-with-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ token }),
+        });
+        const data = await res.json();
+        if (data.user) {
+            setUser(data.user);
+            return true;
+        }
+        throw new Error(data.error || 'Token-Login fehlgeschlagen');
+    };
+
     const logout = async () => {
         await fetch('/api/auth/logout', {
             method: 'POST',
@@ -63,7 +78,7 @@ export function AuthProvider({ children }) {
 
     return (
         <AuthContext.Provider value={{
-            user, loading, login, logout, handleCallback, refreshUser,
+            user, loading, login, logout, handleCallback, refreshUser, loginWithToken,
             isAdmin, isLeadership, isModerator, isPending, isApproved, isLoggedIn: !!user,
         }}>
             {children}

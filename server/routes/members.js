@@ -4,6 +4,7 @@ import db from '../db.js';
 import { requireAdmin } from './auth.js';
 import { fetchGuildMembers, fetchGuildRoles } from '../lib/discordBot.js';
 import { log } from '../logger.js';
+import crypto from 'crypto';
 
 // POST /api/members/sync – Sync all Discord members + roles into DB
 router.post('/sync', requireAdmin, async (req, res) => {
@@ -144,6 +145,52 @@ router.put('/:id/system-role', requireAdmin, (req, res) => {
         .run(adminUser?.id, adminUser?.username || 'System', 'set_member_role', member.username, `System role set to "${system_role || '(none)'}"`);
 
     res.json({ success: true, message: `System-Rolle auf "${system_role || '(keine)'}" gesetzt` });
+});
+
+// POST /api/members/:id/token – Generate a login token for a member
+router.post('/:id/token', requireAdmin, (req, res) => {
+    const { id } = req.params;
+
+    const member = db.prepare('SELECT * FROM discord_members WHERE id = ?').get(id);
+    if (!member) {
+        return res.status(404).json({ error: 'Mitglied nicht gefunden' });
+    }
+
+    try {
+        // Check if user exists in the core users table by discord_id
+        let user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(member.discord_id);
+        
+        const token = crypto.randomBytes(32).toString('hex');
+        
+        if (!user) {
+            // Auto-create the user if they've never logged in
+            // Use the mapped system_role if it exists, otherwise default to pending/member
+            // To be safe, if we generate a link, we want to auto-approve them.
+            const defaultRole = member.system_role || 'member';
+            const insertResult = db.prepare(
+                'INSERT INTO users (discord_id, username, avatar, role, approved, display_name) VALUES (?, ?, ?, ?, 1, ?)'
+            ).run(member.discord_id, member.username, member.avatar, defaultRole, member.custom_name || member.display_name);
+            
+            // Log creation
+            db.prepare('INSERT INTO auth_logs (user_id, username, action, ip_address) VALUES (?, ?, ?, ?)')
+                .run(insertResult.lastInsertRowid, member.username, 'register', req.ip);
+                
+            user = db.prepare('SELECT * FROM users WHERE id = ?').get(insertResult.lastInsertRowid);
+        }
+
+        db.prepare(`UPDATE users SET login_token = ?, login_token_expires_at = datetime('now', '+30 days', 'localtime') WHERE id = ?`)
+          .run(token, user.id);
+
+        res.json({
+            success: true,
+            token,
+            link: `${process.env.APP_URL || 'http://localhost:5173'}/login?token=${token}`
+        });
+
+    } catch (err) {
+        log('ERROR', `Failed to generate token for member ${id}: ${err.message}`);
+        res.status(500).json({ error: 'Token konnte nicht generiert werden: ' + err.message });
+    }
 });
 
 export default router;
