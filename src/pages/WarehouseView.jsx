@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import AddProductDialog from '@/components/AddProductDialog';
 import {
     Package, Shield, Warehouse, Settings, Save, X, Loader2,
     PackagePlus, PackageMinus, CheckCircle, AlertCircle, GripHorizontal, ScanLine,
@@ -815,9 +816,10 @@ export default function WarehouseView() {
                             )}
                         </CardHeader>
                         <CardContent>
-                            {/* Search Bar with Autocomplete */}
-                            <div className="relative mt-2 mb-4">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            {/* Search Bar and Add Item Dialog */}
+                            <div className="flex items-center gap-2 mt-2 mb-4">
+                                <div className="relative flex-1">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <Search className="h-4 w-4 text-muted-foreground" />
                                 </div>
                                 {/* Ghost text autocomplete hint */}
@@ -870,6 +872,15 @@ export default function WarehouseView() {
                                         </kbd>
                                     </div>
                                 )}
+                                </div>
+                                <AddProductDialog 
+                                    warehouseId={warehouseId} 
+                                    currentProducts={warehouseItems} 
+                                    onProductAdded={(newProduct) => {
+                                        setCreateProductStatus({ type: 'success', message: `"${newProduct.name}" wurde hinzugefügt!` });
+                                        setTimeout(() => setCreateProductStatus(null), 4000);
+                                    }}
+                                />
                             </div>
 
                             {/* Create Product Status */}
