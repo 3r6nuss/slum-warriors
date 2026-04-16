@@ -168,7 +168,8 @@ if (!userColumns.find(c => c.name === 'display_name')) {
 
 // Migration: Add login_token columns for backup auth if missing
 if (!userColumns.find(c => c.name === 'login_token')) {
-  db.exec(`ALTER TABLE users ADD COLUMN login_token TEXT UNIQUE`);
+  db.exec(`ALTER TABLE users ADD COLUMN login_token TEXT`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_login_token ON users (login_token)`);
   db.exec(`ALTER TABLE users ADD COLUMN login_token_expires_at TEXT`);
 }
 
