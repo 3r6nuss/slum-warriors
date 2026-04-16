@@ -17,7 +17,7 @@ function requireModerator(req, res, next) {
 router.get('/', requireModerator, (req, res) => {
     try {
         const goal = db.prepare("SELECT value FROM settings WHERE key = 'current_quota'").get()?.value || '';
-        const users = db.prepare('SELECT id, discord_id, username, display_name, avatar, role, has_paid_quota FROM users ORDER BY username NOCASE ASC').all();
+        const users = db.prepare('SELECT id, discord_id, username, display_name, avatar, role, has_paid_quota FROM users ORDER BY username COLLATE NOCASE ASC').all();
         
         res.json({ goal, users });
     } catch (err) {
