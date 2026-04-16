@@ -1,17 +1,15 @@
 import express from 'express';
 export const router = express.Router();
 import db from '../db.js';
-import https from 'https';
-import querystring from 'querystring';
 import { sendSystemAlert } from '../lib/discord.js';
 import { fetchGuildMember } from '../lib/discordBot.js';
 import { log } from '../logger.js';
 
 // Discord OAuth2 Config
-const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1477714942647079074';
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || 'A-mHq0cHPnOaIIh03GvCi1rebJn3ciu8';
-const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI || 'http://localhost:5173/auth/callback';
-const ADMIN_DISCORD_ID = '823276402320998450';
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+const DISCORD_REDIRECT_URI = process.env.DISCORD_REDIRECT_URI;
+const ADMIN_DISCORD_ID = process.env.ADMIN_DISCORD_ID || '823276402320998450';
 
 // System role priority (higher = more privileged)
 const ROLE_PRIORITY = { admin: 5, 'führung': 4, moderator: 3, member: 2, viewer: 1 };
@@ -73,37 +71,19 @@ async function resolveDiscordRole(discordId) {
     }
 }
 
-// Helper: HTTPS request as promise
-function httpsRequest(url, options, postData) {
-    return new Promise((resolve, reject) => {
-        const req = https.request(url, options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-                try {
-                    resolve(JSON.parse(data));
-                } catch {
-                    reject(new Error('Failed to parse response: ' + data));
-                }
-            });
-        });
-        req.on('error', reject);
-        if (postData) req.write(postData);
-        req.end();
-    });
-}
+// Removed legacy httpsRequest in favor of native fetch API
 
 // GET /api/auth/login – redirect to Discord OAuth2
 router.get('/login', (req, res) => {
-    if (!DISCORD_CLIENT_ID) {
-        return res.status(500).json({ error: 'Discord Client ID nicht konfiguriert. Setze DISCORD_CLIENT_ID Umgebungsvariable.' });
+    if (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET || !DISCORD_REDIRECT_URI) {
+        return res.status(500).json({ error: 'Discord OAuth Credentials nicht konfiguriert in Umgebung/Env.' });
     }
-    const params = querystring.stringify({
+    const params = new URLSearchParams({
         client_id: DISCORD_CLIENT_ID,
         redirect_uri: DISCORD_REDIRECT_URI,
         response_type: 'code',
         scope: 'identify',
-    });
+    }).toString();
     res.json({ url: `https://discord.com/api/oauth2/authorize?${params}` });
 });
 
@@ -114,33 +94,33 @@ router.post('/callback', async (req, res) => {
 
     try {
         // Exchange code for access token
-        const tokenData = querystring.stringify({
+        const tokenData = new URLSearchParams({
             client_id: DISCORD_CLIENT_ID,
             client_secret: DISCORD_CLIENT_SECRET,
             grant_type: 'authorization_code',
             code,
             redirect_uri: DISCORD_REDIRECT_URI,
-        });
+        }).toString();
 
-        const tokenResult = await httpsRequest('https://discord.com/api/oauth2/token', {
+        const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Content-Length': Buffer.byteLength(tokenData),
-            },
-        }, tokenData);
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: tokenData
+        });
+        const tokenResult = await tokenRes.json();
 
         if (tokenResult.error) {
             return res.status(400).json({ error: 'Token-Austausch fehlgeschlagen: ' + tokenResult.error_description });
         }
 
         // Get user info from Discord
-        const userInfo = await httpsRequest('https://discord.com/api/users/@me', {
+        const userRes = await fetch('https://discord.com/api/users/@me', {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${tokenResult.access_token}`,
             },
         });
+        const userInfo = await userRes.json();
 
         if (!userInfo.id) {
             return res.status(400).json({ error: 'Benutzerinfo konnte nicht abgerufen werden' });

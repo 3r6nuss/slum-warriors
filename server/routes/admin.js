@@ -109,4 +109,45 @@ router.get('/discord-roles', requireAdmin, (req, res) => {
     }
 });
 
+// GET /api/admin/export/csv/:table - export a database table as CSV
+router.get('/export/csv/:table', requireAdmin, (req, res) => {
+    const { table } = req.params;
+    
+    // Whitelist allowed tables to prevent SQL injection or reading sensitive tables (like sqlite_master)
+    const allowedTables = ['inventory', 'transactions', 'products', 'warehouses', 'users', 'adjustments', 'admin_logs', 'auth_logs', 'error_logs', 'kits', 'discord_members'];
+    if (!allowedTables.includes(table)) {
+        return res.status(400).json({ error: 'Ungültiger Tabellenname für Export' });
+    }
+
+    try {
+        const rows = db.prepare(`SELECT * FROM ${table}`).all();
+        
+        if (rows.length === 0) {
+             return res.send('Keine Daten vorhanden');
+        }
+
+        const escapeCSV = (val) => {
+            if (val === null || val === undefined) return '';
+            const str = String(val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
+
+        const headers = Object.keys(rows[0]);
+        let csv = headers.map(escapeCSV).join(',') + '\n';
+        
+        for (const row of rows) {
+            csv += headers.map(h => escapeCSV(row[h])).join(',') + '\n';
+        }
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="export_${table}_${new Date().toISOString().split('T')[0]}.csv"`);
+        res.send('\uFEFF' + csv); // Add BOM for Excel compatibility
+    } catch (err) {
+        res.status(500).json({ error: 'Export fehlgeschlagen: ' + err.message });
+    }
+});
+
 export default router;

@@ -43,8 +43,8 @@ export default function AppShell() {
 
                         <Route path="/stats" element={<StatsView />} />
                         <Route path="/logs" element={<LogView />} />
-                        <Route path="/admin" element={<Navigate to="/admin/roles" replace />} />
-                        <Route path="/admin/:tab" element={<AdminArea />} />
+                        <Route path="/admin" element={<AdminArea />} />
+                        <Route path="/admin/*" element={<Navigate to="/admin" replace />} />
                         <Route path="/abgaben" element={<QuotasView />} />
                     </Routes>
                 </main>
