@@ -64,7 +64,7 @@ export function AuthProvider({ children }) {
 
     const isAdmin = user?.role === 'admin';
     const isLeadership = user?.role === 'führung' || isAdmin;
-    const isModerator = user?.role === 'moderator' || isAdmin;
+    const isModerator = user?.role === 'moderator' || isLeadership;
     const isPending = user?.role === 'pending';
     const isApproved = user?.approved === 1;
 

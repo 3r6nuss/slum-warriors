@@ -64,21 +64,25 @@ export default function Sidebar({ open, onClose }) {
                         </div>
                     </div>
 
-                    {/* Kategorie: Führung */}
-                    {(isAdmin || isLeadership) && (
+                    {/* Kategorie: Führung / Moderator */}
+                    {(isAdmin || isLeadership || isModerator) && (
                         <div>
                             <div className="mb-2 px-3">
                                 <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-                                    Kategorie: Führung
+                                    {(isAdmin || isLeadership) ? 'Kategorie: Führung' : 'Kategorie: Moderation'}
                                 </p>
                             </div>
                             <div className="space-y-1">
-                                <NavLink to="/lager/1" onClick={onClose} className={navLinkStyle}>
-                                    <Shield className="h-4 w-4" /> Führungslager
-                                </NavLink>
-                                <NavLink to="/lager/4" onClick={onClose} className={navLinkStyle}>
-                                    <Shield className="h-4 w-4" /> Führungs-Waffen
-                                </NavLink>
+                                {isLeadership && (
+                                    <>
+                                        <NavLink to="/lager/1" onClick={onClose} className={navLinkStyle}>
+                                            <Shield className="h-4 w-4" /> Führungslager
+                                        </NavLink>
+                                        <NavLink to="/lager/4" onClick={onClose} className={navLinkStyle}>
+                                            <Shield className="h-4 w-4" /> Führungs-Waffen
+                                        </NavLink>
+                                    </>
+                                )}
                                 {isModerator && (
                                     <NavLink to="/lager/5" onClick={onClose} className={navLinkStyle}>
                                         <Shield className="h-4 w-4" /> Erw. Führungslager
@@ -89,9 +93,11 @@ export default function Sidebar({ open, onClose }) {
                                         <BarChart3 className="h-4 w-4" /> Statistiken
                                     </NavLink>
                                 )}
-                                <NavLink to="/logs" onClick={onClose} className={navLinkStyle}>
-                                    <History className="h-4 w-4" /> Lager-Historie
-                                </NavLink>
+                                {isModerator && (
+                                    <NavLink to="/logs" onClick={onClose} className={navLinkStyle}>
+                                        <History className="h-4 w-4" /> Lager-Historie
+                                    </NavLink>
+                                )}
                             </div>
                         </div>
                     )}
