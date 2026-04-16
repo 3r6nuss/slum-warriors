@@ -116,8 +116,17 @@ export default function Sidebar({ open, onClose }) {
                                 </p>
                             </div>
                             <div className="space-y-1">
-                                <NavLink to="/admin" onClick={onClose} className={navLinkStyle}>
-                                    <Crown className="h-4 w-4" /> Admin-Zentrale
+                                <NavLink to="/admin/roles" onClick={onClose} className={navLinkStyle}>
+                                    <Users className="h-4 w-4" /> Rollen & Mitglieder
+                                </NavLink>
+                                <NavLink to="/admin/products" onClick={onClose} className={navLinkStyle}>
+                                    <Package className="h-4 w-4" /> Produkte & Kits
+                                </NavLink>
+                                <NavLink to="/admin/logs" onClick={onClose} className={navLinkStyle}>
+                                    <FileText className="h-4 w-4" /> System-Logs & Konsole
+                                </NavLink>
+                                <NavLink to="/admin/settings" onClick={onClose} className={navLinkStyle}>
+                                    <Settings className="h-4 w-4" /> System-Einst.
                                 </NavLink>
                             </div>
                         </div>
