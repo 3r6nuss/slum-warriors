@@ -184,7 +184,7 @@ router.post('/:id/token', requireAdmin, (req, res) => {
         res.json({
             success: true,
             token,
-            link: `${process.env.APP_URL || 'http://localhost:5173'}/login?token=${token}`
+            link: `${process.env.APP_URL || 'https://nochnaya.3r6nuss.de'}/login?token=${token}`
         });
 
     } catch (err) {
