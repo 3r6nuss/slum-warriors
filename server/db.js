@@ -173,6 +173,11 @@ if (!userColumns.find(c => c.name === 'login_token')) {
   db.exec(`ALTER TABLE users ADD COLUMN login_token_expires_at TEXT`);
 }
 
+// Migration: Add 'has_paid_quota' column to users table if missing
+if (!userColumns.find(c => c.name === 'has_paid_quota')) {
+  db.exec(`ALTER TABLE users ADD COLUMN has_paid_quota INTEGER NOT NULL DEFAULT 0`);
+}
+
 // Migration: Add 'archived' column to products table if missing
 const productCols = db.prepare("PRAGMA table_info(products)").all();
 if (!productCols.find(c => c.name === 'archived')) {
@@ -209,6 +214,11 @@ if (!inventoryCols.find(c => c.name === 'sort_order')) {
 const webhookSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('webhook_enabled');
 if (!webhookSetting) {
   db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('webhook_enabled', 'true');
+}
+
+const quotaSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('current_quota');
+if (!quotaSetting) {
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('current_quota', 'Kein Abgabenziel definiert');
 }
 
 // Seed warehouses if they don't exist

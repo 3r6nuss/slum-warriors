@@ -8,6 +8,7 @@ import WarehouseView from '@/pages/WarehouseView';
 import AdminArea from '@/pages/AdminArea';
 import StatsView from '@/pages/StatsView';
 import LogView from '@/pages/LogView';
+import QuotasView from '@/pages/QuotasView';
 
 export default function AppShell() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -44,6 +45,7 @@ export default function AppShell() {
                         <Route path="/logs" element={<LogView />} />
                         <Route path="/admin" element={<Navigate to="/admin/roles" replace />} />
                         <Route path="/admin/:tab" element={<AdminArea />} />
+                        <Route path="/abgaben" element={<QuotasView />} />
                     </Routes>
                 </main>
             </div>

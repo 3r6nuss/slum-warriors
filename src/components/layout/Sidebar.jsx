@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
     Crown, Shield, Warehouse,
     Users, Package, FileText, Terminal, Activity, Settings,
-    History, BarChart3, Boxes
+    History, BarChart3, Boxes, HandCoins
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import UserProfile from './UserProfile';
@@ -86,6 +86,11 @@ export default function Sidebar({ open, onClose }) {
                                 {isModerator && (
                                     <NavLink to="/lager/5" onClick={onClose} className={navLinkStyle}>
                                         <Shield className="h-4 w-4" /> Erw. Führungslager
+                                    </NavLink>
+                                )}
+                                {isModerator && (
+                                    <NavLink to="/abgaben" onClick={onClose} className={navLinkStyle}>
+                                        <HandCoins className="h-4 w-4" /> Pflichtabgaben
                                     </NavLink>
                                 )}
                                 {isModerator && (

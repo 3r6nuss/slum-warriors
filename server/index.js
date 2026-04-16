@@ -55,6 +55,7 @@ import logsRoutes from './routes/logs.js';
 import kitsRoutes from './routes/kits.js';
 import scannerRoutes from './routes/scanner.js';
 import membersRoutes from './routes/members.js';
+import quotasRoutes from './routes/quotas.js';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productsRoutes);
@@ -67,6 +68,7 @@ app.use('/api/logs', logsRoutes);
 app.use('/api/kits', kitsRoutes);
 app.use('/api/scanner', scannerRoutes);
 app.use('/api/members', membersRoutes);
+app.use('/api/quotas', quotasRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
