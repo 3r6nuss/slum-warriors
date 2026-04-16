@@ -12,8 +12,10 @@ export default function QuotasView() {
     const { isModerator, isLeadership } = useAuth();
     const [loading, setLoading] = useState(true);
     const [users, setUsers] = useState([]);
-    const [goal, setGoal] = useState('');
-    const [originalGoal, setOriginalGoal] = useState('');
+    const [products, setProducts] = useState([]);
+    const [targetProduct, setTargetProduct] = useState('');
+    const [targetQuantity, setTargetQuantity] = useState('');
+    const [originalGoalStr, setOriginalGoalStr] = useState('');
     const [savingGoal, setSavingGoal] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [status, setStatus] = useState(null);
@@ -27,14 +29,30 @@ export default function QuotasView() {
 
     const loadQuotas = async () => {
         try {
-            const res = await fetch('/api/quotas', { credentials: 'include' });
-            const data = await res.json();
-            if (res.ok) {
-                setUsers(data.users || []);
-                setGoal(data.goal || '');
-                setOriginalGoal(data.goal || '');
+            const [quotasRes, productsRes] = await Promise.all([
+                fetch('/api/quotas', { credentials: 'include' }),
+                fetch('/api/products')
+            ]);
+            
+            const [quotasData, productsData] = await Promise.all([
+                quotasRes.json(),
+                productsRes.json()
+            ]);
+
+            if (quotasRes.ok && productsRes.ok) {
+                setUsers(quotasData.users || []);
+                setProducts(productsData || []);
+                setOriginalGoalStr(quotasData.goal || '');
+                
+                try {
+                    const parsed = JSON.parse(quotasData.goal || '{}');
+                    setTargetProduct(parsed.product_id || '');
+                    setTargetQuantity(parsed.quantity || '');
+                } catch {
+                    // Fallback for old plain text goals
+                }
             } else {
-                setStatus({ type: 'error', message: data.error || 'Fehler beim Laden.' });
+                setStatus({ type: 'error', message: quotasData.error || 'Fehler beim Laden.' });
             }
         } catch {
             setStatus({ type: 'error', message: 'Verbindungsfehler beim Laden.' });
@@ -44,6 +62,19 @@ export default function QuotasView() {
     };
 
     const handleSaveGoal = async () => {
+        if (!targetProduct || !targetQuantity) {
+            setStatus({ type: 'error', message: 'Bitte Produkt und Menge wählen.' });
+            setTimeout(() => setStatus(null), 3000);
+            return;
+        }
+
+        const selectedProduct = products.find(p => p.id.toString() === targetProduct.toString());
+        const newGoalStr = JSON.stringify({
+            product_id: parseInt(targetProduct),
+            product_name: selectedProduct?.name || '',
+            quantity: parseInt(targetQuantity)
+        });
+
         setSavingGoal(true);
         setStatus(null);
         try {
@@ -51,11 +82,11 @@ export default function QuotasView() {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify({ goal })
+                body: JSON.stringify({ goal: newGoalStr })
             });
             const data = await res.json();
             if (res.ok) {
-                setOriginalGoal(goal);
+                setOriginalGoalStr(newGoalStr);
                 setStatus({ type: 'success', message: 'Ziel gespeichert!' });
             } else {
                 setStatus({ type: 'error', message: data.error });
@@ -158,19 +189,36 @@ export default function QuotasView() {
                                 <CardDescription>Was müssen die Mitglieder aktuell abgeben?</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label>Text / Anforderung</Label>
-                                    <Input 
-                                        placeholder="z.B. 2000 Kokain" 
-                                        value={goal}
-                                        onChange={e => setGoal(e.target.value)}
-                                        className="bg-background/50"
-                                    />
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <Label>Produkt</Label>
+                                        <select
+                                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                            value={targetProduct}
+                                            onChange={e => setTargetProduct(e.target.value)}
+                                        >
+                                            <option value="">-- Produkt wählen --</option>
+                                            {products.map(p => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Menge</Label>
+                                        <Input 
+                                            type="number"
+                                            min="1"
+                                            placeholder="z.B. 2000" 
+                                            value={targetQuantity}
+                                            onChange={e => setTargetQuantity(e.target.value)}
+                                            className="bg-background/50"
+                                        />
+                                    </div>
                                 </div>
                                 <Button 
                                     className="w-full gap-2" 
                                     onClick={handleSaveGoal}
-                                    disabled={savingGoal || goal === originalGoal}
+                                    disabled={savingGoal}
                                 >
                                     {savingGoal ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                                     Ziel Speichern
